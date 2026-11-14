@@ -1,8 +1,8 @@
 /* Офлайн-режим: сначала сеть (чтобы обновления приходили сразу), без сети — из кэша */
-const CACHE = 'zhelezo-v1';
+const CACHE = 'zhelezo-v2';
 const ASSETS = [
   './', 'index.html', 'css/styles.css',
-  'js/data.js', 'js/store.js', 'js/calc.js', 'js/charts.js', 'js/app.js',
+  'js/data.js', 'js/store.js', 'js/calc.js', 'js/charts.js', 'js/program.js', 'js/app.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'
 ];
 

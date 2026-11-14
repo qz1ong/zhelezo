@@ -353,12 +353,309 @@ function weightStep(ex) {
 }
 function roundTo(v, step) { return Math.round(v / step) * step; }
 
-function exerciseHint(exId, excludeWorkoutId) {
+/* ---------- программа и режимы ---------- */
+function isCompound(ex) { return COMPOUND.includes(ex.id); }
+
+/* Что подставить упражнению в выбранном режиме */
+function modeDefaults(ex, mode) {
+  const m = MODES[mode] || MODES.mid;
+  if (ex.type === 'cardio') return { sets: 1, rmin: 0, rmax: 0 };
+  if (ex.type === 'time') return { sets: 3, rmin: 0, rmax: 0 };
+  // в силовом режиме изолирующие упражнения остаются на 8–12: тяжёлый вес в них бьёт по суставам
+  if (mode === 'str' && !isCompound(ex)) return { sets: 3, rmin: 8, rmax: 12 };
+  return { sets: m.sets, rmin: m.rmin, rmax: m.rmax };
+}
+/* План по строке программы; в поле могло остаться пустое или перепутанное значение */
+function itemPlan(ex, it) {
+  const sets = clampInt(it.sets, 1, 12, 3);
+  if (ex.type === 'time' || ex.type === 'cardio') return { sets, rmin: 0, rmax: 0 };
+  const a = clampInt(it.rmin, 1, 100, 8), b = clampInt(it.rmax, 1, 100, a);
+  return { sets, rmin: Math.min(a, b), rmax: Math.max(a, b) };
+}
+function repsText(p) { return p.rmin === p.rmax ? String(p.rmin) : p.rmin + '–' + p.rmax; }
+function planMode(p) { return !p.rmax ? null : p.rmax <= 6 ? 'str' : p.rmin >= 12 ? 'hi' : 'mid'; }
+function planText(ex, p) {
+  if (ex.type === 'cardio') return null;
+  const sets = p.sets + ' ' + plural(p.sets, 'подход', 'подхода', 'подходов');
+  if (ex.type === 'time') return 'План: ' + sets;
+  return 'План: ' + p.sets + ' × ' + repsText(p) + ' · отдых ' + MODES[planMode(p)].restText;
+}
+
+function programDays() { return S.program ? S.program.days : []; }
+function programDay(id) { return programDays().find(d => d.id === id) || null; }
+function dayItems(day) { return day.items.filter(it => exById(it.exId)); }
+function dayTitle(day) { return (day.name || '').trim() || 'День ' + (programDays().indexOf(day) + 1); }
+function filledDays() { return programDays().filter(d => dayItems(d).length); }
+
+/* План упражнения в тренировке d (черновик или запись): из дня программы или из выбранного режима */
+function planFor(d, ex) {
+  if (!d) return null;
+  const day = d.dayId ? programDay(d.dayId) : null;
+  const item = day ? day.items.find(it => it.exId === ex.id) : null;
+  if (item && (!d.mode || d.mode === day.mode)) return itemPlan(ex, item);
+  if (MODES[d.mode]) return modeDefaults(ex, d.mode);
+  return null;
+}
+/* По какому плану упражнение делается сейчас: по последней тренировке, иначе по программе */
+function currentPlan(exId) {
+  const ex = exById(exId);
+  if (!ex) return null;
+  const ws = sortedWorkouts();
+  for (let i = ws.length - 1; i >= 0; i--) {
+    if (ws[i].test || !ws[i].entries.some(en => en.exId === exId)) continue;
+    const p = planFor(ws[i], ex);
+    if (p) return p;
+    break;
+  }
+  for (const day of programDays()) {
+    const it = day.items.find(x => x.exId === exId);
+    if (it) return itemPlan(ex, it);
+  }
+  return null;
+}
+
+function lastProgramWorkout() {
+  const ws = sortedWorkouts();
+  for (let i = ws.length - 1; i >= 0; i--) if (ws[i].dayId && programDay(ws[i].dayId)) return ws[i];
+  return null;
+}
+/* Дни идут по кругу: следующий после последнего выполненного */
+function nextProgramDay() {
+  const days = filledDays();
+  if (!days.length) return null;
+  const lw = lastProgramWorkout();
+  if (!lw) return days[0];
+  const all = programDays(), i = all.findIndex(d => d.id === lw.dayId);
+  for (let k = 1; k <= all.length; k++) {
+    const d = all[(i + k) % all.length];
+    if (dayItems(d).length) return d;
+  }
+  return days[0];
+}
+function weekProgress() {
+  const from = weekStart(todayStr());
+  return { done: S.workouts.filter(w => w.dayId && programDay(w.dayId) && w.date >= from).length, plan: S.program ? S.program.perWeek : 0 };
+}
+
+/* Сколько подходов в неделю программа даёт каждой группе мышц */
+function programWeekSets() {
+  const days = filledDays(), res = {};
+  if (!days.length) return res;
+  const k = S.program.perWeek / days.length;
+  for (const d of days) for (const it of dayItems(d)) {
+    const ex = exById(it.exId);
+    if (ex.muscle === 'cardio') continue;
+    res[ex.muscle] = (res[ex.muscle] || 0) + itemPlan(ex, it).sets * k;
+  }
+  return res;
+}
+
+/* Замечания к самой программе: травмы, баланс, объём, режимы */
+function programRemarks() {
+  const out = [];
+  const days = programDays();
+  if (!days.length) return out;
+  const filled = filledDays();
+
+  const bad = [], soft = [];
+  for (const d of filled) for (const it of dayItems(d)) {
+    const ex = exById(it.exId), v = injuryVerdict(ex);
+    if (v.level === 3 && !bad.some(b => b.ex === ex)) bad.push({ ex, inj: v.inj });
+    if (v.level === 2 && !soft.some(b => b.ex === ex)) soft.push({ ex, pct: v.pct });
+  }
+  if (bad.length) {
+    const alts = [];
+    for (const m of Array.from(new Set(bad.map(b => b.ex.muscle)))) {
+      const safe = allExercises().filter(e => e.muscle === m && injuryVerdict(e).level <= 1).slice(0, 2);
+      if (safe.length) alts.push(MUSCLES[m].toLowerCase() + ' — ' + safe.map(e => e.name).join(', '));
+    }
+    out.push({ k: 'danger', act: 'openProgram', title: 'В программе есть упражнения под запретом',
+      text: 'Пока травма не зажила, уберите: ' + bad.map(b => b.ex.name).join(', ') + '.' + (alts.length ? ' Чем заменить: ' + alts.join('; ') + '.' : '') });
+  }
+  if (soft.length) {
+    out.push({ k: 'warn', act: 'openProgram', title: 'Часть программы — в щадящем режиме',
+      text: soft.map(b => b.ex.name + ' (−' + b.pct + ' %)').join(', ') + '. Из-за травмы берите вес меньше и делайте 12–15 повторов, даже если день силовой.' });
+  }
+
+  const empty = days.filter(d => !dayItems(d).length);
+  if (empty.length) {
+    out.push({ k: 'info', act: 'openProgram', title: 'Есть пустые дни',
+      text: 'Добавьте упражнения: ' + empty.map(dayTitle).join(', ') + '. Пустые дни в очередь тренировок не попадают.' });
+  }
+  if (!filled.length) return out;
+
+  const ws = programWeekSets();
+  const g = k => ws[k] || 0, rd = v => Math.round(v);
+  const push = g('chest') + g('shoulders') + g('triceps');
+  const pull = g('back') + g('biceps');
+  const legs = g('legs') + g('glutes') + g('calves');
+  const total = push + pull + legs + g('core');
+  const legInj = activeInjuries().some(i => ['knee', 'hip', 'ankle', 'lower_back'].includes(i.area));
+  const major = [['chest', 'грудь', g('chest')], ['back', 'спину', g('back')], ['legs', 'ноги', legs]];
+
+  const missing = major.filter(m => m[2] === 0 && !(m[0] === 'legs' && legInj));
+  if (missing.length) {
+    out.push({ k: 'warn', act: 'openProgram', title: 'В программе нет упражнений на ' + missing.map(m => m[1]).join(' и '),
+      text: 'Без них тело развивается неравномерно, а рейтинг силы остаётся неполным.' });
+  }
+  if (pull > 0 && push + pull >= 10 && push > pull * 1.5) {
+    out.push({ k: 'warn', act: 'openProgram', title: 'В программе жимов больше, чем тяг',
+      text: 'В неделю выходит около ' + rd(push) + ' ' + plural(rd(push), 'подхода', 'подходов', 'подходов') + ' на жимовые группы против ' + rd(pull) + ' на тяговые. Добавьте тяги — так плечи и осанка будут здоровее.' });
+  }
+  if (legs > 0 && total >= 15 && legs < total * 0.18 && !legInj) {
+    out.push({ k: 'warn', act: 'openProgram', title: 'В программе мало работы на ноги',
+      text: 'На ноги приходится ' + rd(100 * legs / total) + ' % подходов. Ориентир — 25–35 %.' });
+  }
+  const over = major.filter(m => m[2] > 24);
+  if (over.length) {
+    out.push({ k: 'warn', act: 'openProgram', title: 'Слишком большой объём',
+      text: over.map(m => MUSCLES[m[0]] + ' — около ' + rd(m[2])).join(', ') + ' подходов в неделю. Обычно хватает 10–20 на группу: сверх этого растёт усталость, а не результат.' });
+  }
+  const low = major.filter(m => m[2] > 0 && m[2] < 6);
+  if (low.length) {
+    out.push({ k: 'info', act: 'openProgram', title: 'Маловато объёма',
+      text: low.map(m => MUSCLES[m[0]] + ' — около ' + rd(m[2])).join(', ') + ' подходов в неделю. Для роста группе обычно нужно от 8–10. Добавьте подход или упражнение.' });
+  }
+  const heavy = filled.filter(d => dayItems(d).reduce((s, it) => s + itemPlan(exById(it.exId), it).sets, 0) > 26);
+  if (heavy.length) {
+    out.push({ k: 'warn', act: 'openProgram', title: 'Перегруженный день: ' + heavy.map(dayTitle).join(', '),
+      text: 'В нём больше 26 подходов. После 20–25 качество работы падает — разнесите упражнения по дням.' });
+  }
+
+  const modes = filled.map(d => d.mode);
+  if (modes.every(m => m === 'str') && S.program.perWeek >= 4) {
+    out.push({ k: 'warn', act: 'openProgram', title: 'Все дни силовые',
+      text: 'Тяжёлая работа на 4–6 повторов ' + S.program.perWeek + ' раз в неделю плохо восстанавливается. Сделайте один-два дня «На массу» или «Многоповторку».' });
+  }
+  if (modes.every(m => m === 'hi')) {
+    out.push({ k: 'info', act: 'openProgram', title: 'Только многоповторка',
+      text: 'Выносливость и техника растут, а максимальная сила — медленно. Если цель — сила, переведите день с базовыми упражнениями в силовой режим.' });
+  }
+  if (S.profile.exp === 'new' && modes.includes('str')) {
+    out.push({ k: 'info', act: 'openProgram', title: 'Силовой режим при небольшом стаже',
+      text: 'Первые полгода лучше работать на 8–12 повторов: техника закрепляется на умеренных весах, а сила всё равно растёт.' });
+  }
+  return out;
+}
+
+/* Рабочий вес по расчётному максимуму: сколько можно поднять на reps повторов */
+function niceW(v) { return v < 20 ? Math.round(v) : roundTo(v, 2.5); }
+function weightForReps(oneRm, reps) { return niceW(oneRm / (1 + reps / 30)); }
+function refMax(hist) {
+  const h = hist.slice(-3);
+  return h.length ? Math.max.apply(null, h.map(x => x.st.best1rm)) : 0;
+}
+
+/* Цель на тренировку по плану: {status, w, text}
+   up — пора добавить вес, switch — вес пересчитан под другой диапазон, rep — добавить повтор, hold — добрать минимум */
+function planTarget(ex, plan, hist) {
+  const last = hist.length ? hist[hist.length - 1] : null;
+  const rng = repsText(plan);
+  if (ex.type === 'time') {
+    return last ? { status: 'rep', text: fmtSec(last.st.maxSec + 5) + ' в лучшем подходе' } : null;
+  }
+  if (ex.type === 'bw') {
+    if (!last) return { status: 'new', text: rng + ' ' + plural(plan.rmax, 'повтор', 'повтора', 'повторов') + ' в подходе' };
+    const best = last.st.maxReps;
+    if (best >= plan.rmax) return { status: 'up', text: 'добавьте отягощение 2,5–5 кг и работайте на ' + rng + ' — верх диапазона взят' };
+    if (best + 1 < plan.rmin) return { status: 'rep', text: (best + 1) + ' ' + plural(best + 1, 'повтор', 'повтора', 'повторов') + ' в лучшем подходе. До плановых ' + rng + ' пока далеко — делайте подходы почти до отказа' };
+    return { status: 'rep', text: (best + 1) + ' ' + plural(best + 1, 'повтор', 'повтора', 'повторов') + ' в лучшем подходе (план ' + rng + ')' };
+  }
+  if (ex.type !== 'w') return null;
+  if (!last || !(last.st.maxW > 0)) {
+    return { status: 'new', text: 'подберите вес, с которым ' + plan.rmax + '-й повтор даётся тяжело, но техника не ломается' };
+  }
+  const top = last.st.maxW, step = weightStep(ex);
+  const topSets = last.sets.filter(s => (+s.w || 0) === top);
+  const minR = Math.min.apply(null, topSets.map(s => +s.r));
+  const ref = refMax(hist), calc = weightForReps(ref, plan.rmax);
+  const recalc = w => ({ status: 'switch', w, text: fmtNum(w, 2) + ' кг × ' + rng + ' — вес подобран под этот диапазон по вашему расчётному максимуму ' + fmtNum(ref, 0) + ' кг' });
+  if (minR >= plan.rmax) {
+    if (minR > plan.rmax + 3) return recalc(Math.max(top + step, calc));
+    if (topSets.length >= Math.min(2, plan.sets)) return { status: 'up', w: top + step, top, minR, n: topSets.length, text: fmtNum(top + step, 2) + ' кг × ' + rng + ' — пора добавить вес' };
+    return { status: 'hold', w: top, text: fmtNum(top, 2) + ' кг × ' + rng + ' во всех ' + plan.sets + ' подходах, потом добавите вес' };
+  }
+  if (minR < plan.rmin) {
+    const w = Math.min(top - step, calc);
+    if (minR < plan.rmin - 2 && w > 0) return recalc(w);
+    return { status: 'hold', w: top, text: fmtNum(top, 2) + ' кг × ' + plan.rmin + ' в каждом подходе — доберите нижнюю границу плана' };
+  }
+  return { status: 'rep', w: top, text: fmtNum(top, 2) + ' кг × ' + (minR + 1) + ' — добавьте повтор; на ' + plan.rmax + ' повторах прибавите вес' };
+}
+
+/* ---------- проверка силы ---------- */
+function tests() { return sortedWorkouts().filter(w => w.test); }
+
+/* Разбор одной проверки: уровни по каждому упражнению и сравнение с предыдущей */
+function testSummary(w) {
+  const sex = sexKey(), af = ageFactor(w.date), bw = bwAt(w.date);
+  const earlier = tests().filter(x => x.date < w.date);
+  const prev = earlier.length ? earlier[earlier.length - 1] : null;
+  const rows = [];
+  for (const en of w.entries) {
+    const ex = exById(en.exId), st = entryStats(en, w.date);
+    if (!ex || !st || !st.sets) continue;
+    const pe = prev ? prev.entries.find(x => x.exId === en.exId) : null;
+    const pst = pe ? entryStats(pe, prev.date) : null;
+    const row = { ex, name: KEY_NAMES[ex.key] || ex.name, result: en.sets.filter(s => isValidSet(ex, s)).map(s => setText(ex, s)).join(', '), score: null, strength: false, delta: null };
+    if (ex.type === 'w') {
+      row.e1rm = st.best1rm;
+      row.ratio = bw ? st.best1rm / bw : null;
+      if (pst) row.delta = { v: st.best1rm - pst.best1rm, unit: 'кг' };
+      row.work = { str: weightForReps(st.best1rm, 6), mid: weightForReps(st.best1rm, 12), hi: weightForReps(st.best1rm, 20) };
+    } else if (ex.type === 'bw') {
+      row.reps = st.maxReps;
+      row.ratio = bw && st.best1rm ? st.best1rm / bw : null;
+      if (pst) row.delta = { v: st.maxReps - pst.maxReps, unit: 'повт.' };
+    } else {
+      row.sec = st.maxSec;
+      if (pst) row.delta = { v: st.maxSec - pst.maxSec, unit: 'сек' };
+    }
+    if (ex.key && STD[sex][ex.key]) {
+      row.strength = true;
+      if (row.ratio) row.score = scoreFrom(row.ratio * af, STD[sex][ex.key]);
+    } else if (ESTD[sex][ex.id]) {
+      row.score = scoreFrom((ex.type === 'time' ? st.maxSec : st.maxReps) * af, ESTD[sex][ex.id]);
+    }
+    rows.push(row);
+  }
+  const str = rows.filter(r => r.strength && r.score != null);
+  const score = str.length ? str.reduce((s, r) => s + r.score, 0) / str.length : null;
+  const weak = str.length >= 2 ? str.slice().sort((a, b) => a.score - b.score)[0] : null;
+  const strong = str.length >= 2 ? str.slice().sort((a, b) => b.score - a.score)[0] : null;
+  return { rows, score, bw, prev, weak, strong: strong && weak && strong.score - weak.score >= 12 ? strong : null };
+}
+
+/* Старт → сейчас: вес, базовые упражнения, обхваты */
+function sortedMeasures() { return S.measures.slice().sort((a, b) => a.date.localeCompare(b.date)); }
+function startVsNow() {
+  const rows = [];
+  const ws = sortedWeights();
+  if (ws.length) rows.push({ name: 'Вес тела', unit: 'кг', a: ws[0].kg, b: ws[ws.length - 1].kg, date: ws[0].date, digits: 1, single: ws.length === 1 });
+  for (const t of TEST_ITEMS) {
+    const ex = exById(t.id), h = exHistory(t.id);
+    if (!ex || !h.length) continue;
+    const f = t.kind === 'w' ? 'best1rm' : t.kind === 'r' ? 'maxReps' : 'maxSec';
+    rows.push({
+      name: (KEY_NAMES[ex.key] || ex.name) + (t.kind === 'w' ? ', 1ПМ' : ''), unit: t.kind === 'w' ? 'кг' : t.kind === 'r' ? 'повт.' : 'сек',
+      a: h[0].st[f], b: Math.max.apply(null, h.slice(-3).map(x => x.st[f])), date: h[0].date, digits: 0, single: h.length === 1, lift: true
+    });
+  }
+  const ms = sortedMeasures();
+  for (const k of Object.keys(GIRTHS)) {
+    const have = ms.filter(m => +m[k] > 0);
+    if (have.length) rows.push({ name: GIRTHS[k], unit: 'см', a: +have[0][k], b: +have[have.length - 1][k], date: have[0].date, digits: 1, single: have.length === 1 });
+  }
+  return rows;
+}
+
+/* plan — {sets, rmin, rmax} из программы или режима; без него работает общее правило */
+function exerciseHint(exId, excludeWorkoutId, plan) {
   const ex = exById(exId);
   if (!ex) return null;
   const hist = exHistory(exId, excludeWorkoutId);
   const v = injuryVerdict(ex);
-  const res = { last: null, lastSets: [], target: null, injury: null };
+  const res = { last: null, lastSets: [], target: null, injury: null, plan: plan ? planText(ex, plan) : null };
   const last = hist.length ? hist[hist.length - 1] : null;
   if (last) res.lastSets = last.sets;
   if (last) res.last = 'В прошлый раз (' + fmtDate(last.date) + '): ' + last.sets.map(s => setText(ex, s)).join(', ');
@@ -373,7 +670,10 @@ function exerciseHint(exId, excludeWorkoutId) {
     res.injury = { level: 1, text: 'Осторожно, упражнение задевает травмированную зону: ' + injuryTitle(v.inj).toLowerCase() };
   }
 
-  if (last && v.level < 2) {
+  if (plan && v.level < 2) {
+    const tg = planTarget(ex, plan, hist);
+    if (tg) res.target = 'Цель: ' + tg.text;
+  } else if (last && v.level < 2) {
     if (ex.type === 'w' && last.st.maxW > 0) {
       const top = last.st.maxW;
       const topSets = last.sets.filter(s => (+s.w || 0) === top);
@@ -442,7 +742,38 @@ function recommendations() {
   if (!S.weights.length) {
     out.push({ k: 'info', title: 'Укажите вес тела', text: 'Рейтинг силы считается относительно веса тела. Добавьте его в профиле.', go: 'profile' });
   }
+  // своя программа и проверка силы
+  const filled = filledDays();
+  if (!S.program) {
+    out.push({ k: 'info', act: 'openProgram', title: 'Составьте свою программу', text: 'Впишите дни и упражнения, выберите режим — силовой или многоповторку. Приложение будет подсказывать веса и повторы под ваш план.' });
+  } else {
+    let nWarn = 0;   // на главной — запреты и два самых важных замечания, остальное видно в самой программе
+    for (const r of programRemarks()) if (r.k === 'danger' || (r.k === 'warn' && nWarn++ < 2)) out.push(r);
+  }
+  const ts = tests();
+  if (!ts.length) {
+    out.push({ k: 'info', act: 'openTest', title: 'Пройдите проверку силы', text: 'Несколько базовых упражнений — и приложение определит ваш стартовый уровень и подберёт рабочие веса под каждый режим.' });
+  } else {
+    const tWeeks = Math.floor(daysDiff(ts[ts.length - 1].date, t) / 7);
+    if (tWeeks >= 8) out.push({ k: 'info', act: 'openTest', title: 'Пора повторить проверку силы', text: 'С прошлой проверки ' + plural(tWeeks, 'прошла', 'прошло', 'прошло') + ' ' + tWeeks + ' ' + plural(tWeeks, 'неделя', 'недели', 'недель') + '. Повторите её — увидите, насколько выросли показатели.' });
+  }
   if (!ws.length) return out;
+
+  // выполнение программы
+  const lp = lastProgramWorkout();
+  if (lp && daysDiff(lp.date, t) <= 10) {
+    const day = programDay(lp.dayId);
+    const doneIds = lp.entries.map(en => en.exId);
+    const skipped = dayItems(day).filter(it => !doneIds.includes(it.exId) && injuryVerdict(exById(it.exId)).level < 3).map(it => exById(it.exId).name);
+    if (skipped.length) out.push({ k: 'info', act: 'openProgram', title: 'День программы выполнен не полностью', text: fmtDate(lp.date) + ', «' + dayTitle(day) + '»: пропущено — ' + skipped.slice(0, 4).join(', ') + '. Если упражнение не подходит, замените его в программе, чтобы план совпадал с тем, что вы делаете.' });
+  }
+  if (lp && filled.length && daysDiff(lp.date, t) <= 14) {
+    const wp = weekProgress();
+    const wd = (parseD(t).getDay() + 6) % 7;
+    const daysLeft = 7 - wd - (ws.some(w => w.date === t && !w.test) ? 1 : 0);
+    const left = wp.plan - wp.done;
+    if (left > 0 && left > daysLeft) out.push({ k: 'warn', title: 'Неделя идёт с отставанием от программы', text: 'По плану ' + wp.plan + ' ' + plural(wp.plan, 'тренировка', 'тренировки', 'тренировок') + ' в неделю, сделано ' + wp.done + ', а дней осталось ' + daysLeft + '. Не навёрстывайте двумя тренировками в день — просто продолжайте по очереди.' });
+  }
 
   // режим
   const last = ws[ws.length - 1];
@@ -465,10 +796,19 @@ function recommendations() {
     const lastH = hist[hist.length - 1];
     if (daysDiff(lastH.date, t) > 21) continue;
     if (injuryVerdict(ex).level >= 2) continue;
+    const plan = currentPlan(id);
+    if (plan) {
+      const tg = planTarget(ex, plan, hist);
+      if (tg && tg.status === 'up' && nUp < 3) {
+        nUp++;
+        out.push({ k: 'good', title: 'Пора добавить вес: ' + ex.name, text: 'По плану ' + repsText(plan) + ' повторов, а вы сделали ' + tg.n + ' ' + plural(tg.n, 'подход', 'подхода', 'подходов') + ' по ' + tg.minR + ' с ' + fmtNum(tg.top, 2) + ' кг. В следующий раз — ' + fmtNum(tg.w, 2) + ' кг на ' + repsText(plan) + '.' });
+        continue;
+      }
+    }
     const top = lastH.st.maxW;
     const topSets = lastH.sets.filter(s => (+s.w || 0) === top);
     const minR = Math.min.apply(null, topSets.map(s => +s.r));
-    if (top > 0 && topSets.length >= 2 && minR >= 10 && nUp < 3) {
+    if (!plan && top > 0 && topSets.length >= 2 && minR >= 10 && nUp < 3) {
       nUp++;
       out.push({ k: 'good', title: 'Пора добавить вес: ' + ex.name, text: 'Вы сделали ' + topSets.length + ' ' + plural(topSets.length, 'подход', 'подхода', 'подходов') + ' по ' + minR + ' и больше повторов с ' + fmtNum(top, 2) + ' кг. В следующий раз попробуйте ' + fmtNum(top + weightStep(ex), 2) + ' кг на 6–8 повторов.' });
       continue;
@@ -478,7 +818,11 @@ function recommendations() {
       const b = Math.max.apply(null, hist.slice(-6, -3).map(h => h.st.best1rm));
       if (a <= b * 1.005) {
         nPlateau++;
-        out.push({ k: 'warn', title: 'Плато: ' + ex.name, text: 'Расчётный максимум не растёт уже 6 тренировок. Сделайте разгрузочную неделю (−10–15 % веса) или смените диапазон повторов: например, 5 × 5 вместо 3 × 10.' });
+        out.push({ k: 'warn', title: 'Плато: ' + ex.name, text: 'Расчётный максимум не растёт уже 6 тренировок. Сделайте разгрузочную неделю (−10–15 % веса) или ' + (
+          !plan ? 'смените диапазон повторов: например, 5 × 5 вместо 3 × 10.'
+          : planMode(plan) === 'str' ? 'на 3–4 недели переведите упражнение в режим «На массу» (8–12 повторов), затем вернитесь к силовому.'
+          : planMode(plan) === 'hi' ? 'на 3–4 недели переведите упражнение в силовой режим (4–6 повторов).'
+          : 'на 3–4 недели смените режим: силовой (4–6 повторов) или многоповторка (15–20).') });
       }
     }
   }
@@ -544,9 +888,29 @@ function buildDemoState() {
     for (const day of days) {
       const date = addDays(mon, day.d);
       if (date > t) continue;
-      st.workouts.push({ id: 'demo' + wk + '_' + day.d, date, note: '', entries: day.entries });
+      const w = { id: 'demo' + wk + '_' + day.d, date, note: '', entries: day.entries };
+      const pd = { 0: 'demoA', 2: 'demoB', 4: 'demoC' }[day.d];
+      if (pd) { w.dayId = pd; w.mode = pd === 'demoB' ? 'str' : 'mid'; }
+      st.workouts.push(w);
     }
   }
   st.weights = st.weights.filter(w => w.date <= t);
+
+  const it = (exId, sets, rmin, rmax) => ({ exId, sets, rmin, rmax });
+  st.program = { name: 'Три дня в неделю', perWeek: 3, days: [
+    { id: 'demoA', name: 'Грудь и плечи', mode: 'mid', items: [it('bench', 3, 8, 12), it('ohp', 3, 8, 12), it('dips', 2, 8, 12), it('pushdown', 3, 8, 12), it('pushup', 1, 8, 12)] },
+    { id: 'demoB', name: 'Спина', mode: 'str', items: [it('deadlift', 3, 4, 6), it('pullup', 3, 4, 6), it('bb_row', 3, 4, 6), it('db_curl', 3, 8, 12), it('plank', 1, 0, 0)] },
+    { id: 'demoC', name: 'Ноги', mode: 'mid', items: [it('squat', 3, 8, 12), it('leg_press', 3, 8, 12), it('rdl', 3, 8, 12), it('calf_raise', 3, 8, 12)] }
+  ] };
+  const t0 = addDays(start, -2);
+  st.profile.startDate = t0;
+  if (!st.profile.exp) st.profile.exp = 'mid';
+  st.weights.unshift({ date: t0, kg: 77.8 });
+  st.measures = [{ date: t0, chest: 98, waist: 84, biceps: 34, thigh: 55 }, { date: t, chest: 100.5, waist: 83, biceps: 35.5, thigh: 57 }];
+  st.workouts.unshift({ id: 'demoTest', date: t0, note: 'Проверка силы', test: true, entries: [
+    mk('bench', [{ w: 55, r: 5 }]), mk('squat', [{ w: 65, r: 5 }]), mk('deadlift', [{ w: 85, r: 5 }]),
+    mk('ohp', [{ w: 32.5, r: 5 }]), mk('bb_row', [{ w: 45, r: 8 }]),
+    mk('pullup', [{ w: 0, r: 4 }]), mk('pushup', [{ w: 0, r: 18 }]), mk('plank', [{ sec: 55 }])
+  ] });
   return st;
 }

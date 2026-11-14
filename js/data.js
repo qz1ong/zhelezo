@@ -151,6 +151,31 @@ const ESTD = {
 
 const LEVELS = ['Старт', 'Начинающий', 'Любитель', 'Опытный', 'Продвинутый', 'Элита'];
 
+/* ---------- Режимы тренировки ----------
+   sets/rmin/rmax — что подставляется в программу, rest — отдых в секундах */
+const MODES = {
+  str: { name: 'Силовой', sets: 4, rmin: 4, rmax: 6, rest: 180, restText: '2–3 мин',
+    desc: 'Тяжёлый вес на 4–6 повторов, отдых 2–3 минуты, в запасе 1–2 повтора. Растит максимальную силу.' },
+  mid: { name: 'На массу', sets: 3, rmin: 8, rmax: 12, rest: 120, restText: '1,5–2 мин',
+    desc: 'Средний вес на 8–12 повторов, отдых 1,5–2 минуты. Растит мышцы и силу понемногу.' },
+  hi: { name: 'Многоповторка', sets: 3, rmin: 15, rmax: 20, rest: 60, restText: '45–75 сек',
+    desc: 'Лёгкий вес на 15–20 повторов, отдых около минуты. Выносливость, техника и щадящая нагрузка на суставы.' }
+};
+/* Многосуставные упражнения: только их есть смысл делать на 4–6 повторов */
+const COMPOUND = ['bench', 'incline_bench', 'db_bench', 'dips', 'deadlift', 'pullup', 'lat_pulldown', 'bb_row', 'db_row',
+  'cable_row', 'chest_row', 'squat', 'front_squat', 'goblet_squat', 'leg_press', 'lunge', 'rdl', 'hip_thrust',
+  'ohp', 'db_press', 'close_bench'];
+
+/* ---------- Проверка силы: что в неё входит ---------- */
+const TEST_ITEMS = [
+  { id: 'bench', kind: 'w' }, { id: 'squat', kind: 'w' }, { id: 'deadlift', kind: 'w' },
+  { id: 'ohp', kind: 'w' }, { id: 'bb_row', kind: 'w' },
+  { id: 'pullup', kind: 'r' }, { id: 'pushup', kind: 'r' }, { id: 'plank', kind: 'sec' }
+];
+
+const EXPERIENCE = { '': 'не указан', new: 'до полугода', mid: 'от полугода до 2 лет', adv: 'больше 2 лет' };
+const GIRTHS = { chest: 'Грудь', waist: 'Талия', biceps: 'Бицепс', thigh: 'Бедро' };
+
 /* ---------- Советы по зонам травм ---------- */
 const AREA_INFO = {
   neck: {

@@ -6,9 +6,11 @@ const STORE_KEY = 'zhelezo.v1';
 function defaultState() {
   return {
     v: 1,
-    profile: { name: '', sex: 'm', birthYear: null, height: null },
+    profile: { name: '', sex: 'm', birthYear: null, height: null, startDate: null, exp: '' },
+    measures: [],         // {date, chest, waist, biceps, thigh} — обхваты в см
+    program: null,        // {name, perWeek, days:[{id, name, mode, items:[{exId, sets, rmin, rmax}]}]}
     weights: [],          // {date, kg}
-    workouts: [],         // {id, date, note, entries:[{exId, sets:[...]}]}
+    workouts: [],         // {id, date, note, dayId, mode, test, entries:[{exId, sets:[...]}]}
     customExercises: [],  // как в EXERCISES, с custom:true
     injuries: [],         // {id, area, side, severity, date, status, endDate, note, pain:[{date, level}]}
     draft: null           // незавершённая тренировка
@@ -26,10 +28,35 @@ function loadState() {
 function normalizeState(obj) {
   const st = Object.assign(defaultState(), obj || {});
   st.profile = Object.assign(defaultState().profile, st.profile || {});
-  for (const k of ['weights', 'workouts', 'customExercises', 'injuries']) {
+  for (const k of ['weights', 'workouts', 'customExercises', 'injuries', 'measures']) {
     if (!Array.isArray(st[k])) st[k] = [];
   }
+  st.program = normalizeProgram(st.program);
   return st;
+}
+
+/* Программа приходит из памяти или из файла-копии — приводим к ожидаемому виду */
+function clampInt(v, lo, hi, def) {
+  v = Math.round(+v);
+  return v >= lo && v <= hi ? v : def;
+}
+function normalizeProgram(p) {
+  if (!p || typeof p !== 'object' || !Array.isArray(p.days)) return null;
+  return {
+    name: String(p.name || '').slice(0, 40),
+    perWeek: clampInt(p.perWeek, 1, 7, 3),
+    days: p.days.filter(d => d && typeof d === 'object').slice(0, 14).map(d => ({
+      id: String(d.id || uid()),
+      name: String(d.name || '').slice(0, 40),
+      mode: MODES[d.mode] ? d.mode : 'mid',
+      items: (Array.isArray(d.items) ? d.items : []).filter(it => it && it.exId).slice(0, 30).map(it => ({
+        exId: String(it.exId),
+        sets: clampInt(it.sets, 1, 12, 3),
+        rmin: clampInt(it.rmin, 1, 100, 8),
+        rmax: clampInt(it.rmax, 1, 100, 12)
+      }))
+    }))
+  };
 }
 
 let S = loadState();

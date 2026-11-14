@@ -5,7 +5,7 @@ const $ = (s, r) => (r || document).querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ACC = '#ff7a1a', BLUE = '#4ea8ff', GREEN = '#34d399';
 
-const UI = { tab: 'home', seg: 'ex', progEx: null, metric: null, range: 90, open: {}, pick: { q: '', m: '' } };
+const UI = { tab: 'home', seg: 'ex', logSeg: 'hist', progEx: null, metric: null, range: 90, open: {}, pick: { q: '', m: '', day: null } };
 let deferredInstall = null;
 let confirmCb = null;
 
@@ -55,7 +55,8 @@ function ratingCard(label, rt, color) {
     '<span class="ring-txt"><b>' + label + '</b><span>' + levelName(rt.score) + '</span></span></button>';
 }
 function recCard(r) {
-  return '<div class="card rec ' + r.k + '"' + (r.go ? ' data-act="go" data-tab="' + r.go + '" role="button" tabindex="0"' : '') + '><b>' + esc(r.title) + '</b><p>' + esc(r.text) + '</p></div>';
+  const act = r.act ? ' data-act="' + r.act + '"' : r.go ? ' data-act="go" data-tab="' + r.go + '"' : '';
+  return '<div class="card rec ' + r.k + '"' + act + (act ? ' role="button" tabindex="0"' : '') + '><b>' + esc(r.title) + '</b><p>' + esc(r.text) + '</p></div>';
 }
 
 function viewHome() {
@@ -70,6 +71,7 @@ function viewHome() {
   const name = (S.profile.name || '').trim();
   return '<header class="top"><div><div class="muted">' + fmtDateLong(t) + '</div><h1>' + (name ? 'Привет, ' + esc(name) + '!' : 'Железо') + '</h1></div></header>' +
     '<button class="btn primary big" data-act="startWorkout">' + (S.draft ? 'Продолжить тренировку' : 'Начать тренировку') + '</button>' +
+    todayPlanCard() +
     '<div class="grid2">' + ratingCard('Сила', sr, ACC) + ratingCard('Выносливость', er, BLUE) + '</div>' +
     '<div class="stats">' +
     '<div><b>' + in7.length + '</b><span>' + plural(in7.length, 'тренировка', 'тренировки', 'тренировок') + ' за 7 дней</span></div>' +
@@ -86,8 +88,10 @@ function workoutCard(w, forceOpen) {
   const vol = workoutVolume(w), nsets = workoutSetCount(w);
   const exs = w.entries.filter(en => exById(en.exId));
   const id = esc(w.id);
+  const day = w.dayId ? programDay(w.dayId) : null;
+  const tag = w.test ? 'Проверка силы · ' : (day ? esc(dayTitle(day)) + ' · ' : '') + (MODES[w.mode] ? MODES[w.mode].name.toLowerCase() + ' · ' : '');
   let html = '<div class="card wk"><div class="wk-head"' + (forceOpen ? '' : ' data-act="toggleWk" data-id="' + id + '" role="button" tabindex="0"') + '>' +
-    '<div><b>' + fmtDateLong(w.date) + '</b><div class="muted">' + exs.length + ' ' + plural(exs.length, 'упражнение', 'упражнения', 'упражнений') +
+    '<div><b>' + fmtDateLong(w.date) + '</b><div class="muted">' + tag + exs.length + ' ' + plural(exs.length, 'упражнение', 'упражнения', 'упражнений') +
     ' · ' + nsets + ' ' + plural(nsets, 'подход', 'подхода', 'подходов') + (vol ? ' · ' + fmtNum(vol, 0) + ' кг' : '') + '</div></div>' +
     (forceOpen ? '' : '<span class="chev' + (open ? ' up' : '') + '">›</span>') + '</div>';
   if (open) {
@@ -97,7 +101,8 @@ function workoutCard(w, forceOpen) {
       const sets = (en.sets || []).filter(s => isValidSet(ex, s));
       html += '<div class="wk-ex"><span>' + esc(ex.name) + '</span><span class="muted">' + sets.map(s => setText(ex, s)).join(', ') + '</span></div>';
     }
-    html += '<div class="row-btns"><button class="btn small" data-act="repeatWk" data-id="' + id + '">Повторить</button>' +
+    html += '<div class="row-btns">' + (w.test ? '<button class="btn small" data-act="testResult" data-id="' + id + '">Результат</button>'
+      : '<button class="btn small" data-act="repeatWk" data-id="' + id + '">Повторить</button>') +
       '<button class="btn small" data-act="editWk" data-id="' + id + '">Изменить</button>' +
       '<button class="btn small danger" data-act="delWk" data-id="' + id + '">Удалить</button></div></div>';
   }
@@ -107,7 +112,9 @@ function workoutCard(w, forceOpen) {
 function viewLog() {
   const ws = sortedWorkouts().reverse();
   let html = '<header class="top"><h1>Дневник</h1></header>' +
-    '<button class="btn primary big" data-act="startWorkout">' + (S.draft ? 'Продолжить тренировку' : 'Новая тренировка') + '</button>';
+    '<div class="seg">' + [['hist', 'История'], ['prog', 'Программа']].map(t => '<button class="' + (UI.logSeg === t[0] ? 'on' : '') + '" data-act="logSeg" data-seg="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>';
+  if (UI.logSeg === 'prog') return html + viewProgram();
+  html += '<button class="btn primary big mt" data-act="startWorkout">' + (S.draft ? 'Продолжить тренировку' : 'Новая тренировка') + '</button>';
   if (!ws.length) {
     return html + '<div class="card empty"><b>Здесь будет история тренировок</b><p class="muted">Начните первую тренировку или загрузите демо-данные в профиле, чтобы посмотреть, как всё выглядит.</p></div>';
   }
@@ -133,12 +140,13 @@ function entryCard(en, i) {
   const ex = exById(en.exId);
   if (!ex) return '';
   const fields = SET_FIELDS[ex.type];
-  const hint = exerciseHint(en.exId, S.draft.id);
+  const hint = exerciseHint(en.exId, S.draft.id, S.draft.test ? null : planFor(S.draft, ex));
   let html = '<div class="card entry"><div class="entry-head"><div><b>' + esc(ex.name) + '</b><div class="muted">' + (MUSCLES[ex.muscle] || '') + '</div></div>' +
     '<button class="x" data-act="delEntry" data-i="' + i + '" aria-label="Убрать упражнение">✕</button></div>';
   if (hint.injury) html += '<div class="hint inj l' + hint.injury.level + '">' + esc(hint.injury.text) + '</div>';
+  if (hint.plan) html += '<div class="hint plan">' + esc(hint.plan) + '</div>';
   if (hint.last) html += '<div class="hint">' + esc(hint.last) + '</div>';
-  if (hint.target) html += '<div class="hint target">' + esc(hint.target) + '</div>';
+  if (hint.target && !S.draft.test) html += '<div class="hint target">' + esc(hint.target) + '</div>';
   html += '<div class="sets c' + fields.length + '"><div class="set head"><span>№</span>' + fields.map(f => '<span>' + f[1] + '</span>').join('') + '<span></span></div>';
   const prev = hint.lastSets;
   en.sets.forEach((s, j) => {
@@ -153,10 +161,12 @@ function entryCard(en, i) {
 
 function viewEdit() {
   const d = S.draft;
+  const sug = MODES[d.mode] && !d.test ? MODES[d.mode].rest : 0;   // отдых, подходящий режиму
   return '<header class="top row"><h1>' + (d.id ? 'Изменение' : 'Тренировка') + '</h1><button class="btn small" data-act="cancelDraft">Отмена</button></header>' +
     '<div class="card form-grid"><label>Дата<input type="date" data-draft="date" value="' + esc(d.date) + '" max="' + todayStr() + '"></label>' +
     '<label>Заметка<input type="text" data-draft="note" value="' + esc(d.note || '') + '" placeholder="Самочувствие, сон, настроение"></label></div>' +
-    '<div class="card rest"><span>Отдых</span><div class="chips">' + [60, 90, 120, 180].map(s => '<button data-act="rest" data-sec="' + s + '">' + s + ' с</button>').join('') +
+    draftModeCard(d) +
+    '<div class="card rest"><span>Отдых</span><div class="chips">' + [60, 90, 120, 180].map(s => '<button' + (s === sug ? ' class="sug"' : '') + ' data-act="rest" data-sec="' + s + '">' + s + ' с</button>').join('') +
     '</div><b id="rest-out"></b></div>' +
     d.entries.map(entryCard).join('') +
     '<button class="btn dashed big" data-act="pickEx">＋ Добавить упражнение</button>' +
@@ -176,12 +186,14 @@ function updRest() {
 }
 
 /* ---------- Выбор упражнения ---------- */
-function openPicker() {
-  UI.pick = { q: '', m: '' };
-  openModal('<div class="sheet-head"><h3>Упражнение</h3><button class="x" data-act="closeModal" aria-label="Закрыть">✕</button></div>' +
+/* day — номер дня программы, если упражнение добавляют в программу, а не в тренировку */
+function openPicker(day) {
+  UI.pick = { q: '', m: '', day: day == null ? null : day };
+  openModal('<div class="sheet-head"><h3>' + (day == null ? 'Упражнение' : 'Упражнения в программу') + '</h3><button class="x" data-act="closeModal" aria-label="Закрыть">✕</button></div>' +
     '<input id="pick-q" type="search" placeholder="Поиск по названию" autocomplete="off">' +
     '<div class="chips scroll" id="pick-m"></div><div id="pick-list" class="list"></div>' +
-    '<button class="btn" data-act="newExForm">＋ Своё упражнение</button>');
+    (day == null ? '<button class="btn" data-act="newExForm">＋ Своё упражнение</button>'
+      : '<div class="row-btns"><button class="btn" data-act="newExForm">＋ Своё упражнение</button><button class="btn primary" data-act="closeModal">Готово</button></div>'));
   renderPickList();
 }
 function renderPickList() {
@@ -204,13 +216,14 @@ function renderPickList() {
 }
 function openCustomExForm() {
   const name = UI.pick.q.trim();
+  const toProg = UI.pick.day != null;
   openModal('<div class="sheet-head"><h3>Своё упражнение</h3><button class="x" data-act="closeModal" aria-label="Закрыть">✕</button></div>' +
     '<label>Название<input id="cx-name" type="text" maxlength="60" value="' + esc(name) + '"></label>' +
     '<div class="form-grid"><label>Группа мышц<select id="cx-muscle">' + Object.keys(MUSCLES).map(k => '<option value="' + k + '">' + MUSCLES[k] + '</option>').join('') + '</select></label>' +
     '<label>Как считать<select id="cx-type">' + Object.keys(TYPES).map(k => '<option value="' + k + '">' + TYPES[k] + '</option>').join('') + '</select></label></div>' +
     '<div class="lbl">Какие зоны нагружает (нужно для советов при травмах)</div>' +
     '<div class="checks">' + Object.keys(AREAS).map(k => '<label><input type="checkbox" name="cx-area" value="' + k + '"><span>' + AREAS[k] + '</span></label>').join('') + '</div>' +
-    '<button class="btn primary big" data-act="saveCustomEx">Создать и добавить</button>');
+    '<button class="btn primary big" data-act="saveCustomEx">' + (toProg ? 'Создать и добавить в программу' : 'Создать и добавить') + '</button>');
 }
 
 /* ---------- Прогресс ---------- */
@@ -291,7 +304,8 @@ function progRating() {
     '<p class="muted">Среднее по базовым движениям: расчётный максимум на 1 повтор относительно веса тела.</p></div></div>' +
     ratingBars(sr.items, ACC,
       it => (it.key === 'pullup' ? '' : fmtNum(it.e1rm, 0) + ' кг · ') + '×' + fmtNum(it.ratio, 2) + ' веса тела · ' + levelName(it.score),
-      it => it.key === 'pullup' ? it.next.reps + ' ' + plural(it.next.reps, 'повтор', 'повтора', 'повторов') + ' без отягощения' : '1ПМ ' + fmtNum(it.next.e1rm, 0) + ' кг') + '</div>' +
+      it => it.key === 'pullup' ? it.next.reps + ' ' + plural(it.next.reps, 'повтор', 'повтора', 'повторов') + ' без отягощения' : '1ПМ ' + fmtNum(it.next.e1rm, 0) + ' кг') +
+    '<div class="row-btns"><button class="btn small" data-act="openTest">Пройти проверку силы</button></div></div>' +
     '<div class="card"><div class="rating-head">' + ringSvg(er.score, BLUE) + '<div><h3>Выносливость</h3><div class="lvl">' + levelName(er.score) + '</div>' +
     '<p class="muted">Повторы со своим весом, планка, бег, объём кардио и силовой работы за неделю.</p></div></div>' +
     ratingBars(er.items, BLUE,
@@ -413,6 +427,7 @@ function viewProfile() {
     '<label>Год рождения<input type="number" inputmode="numeric" data-profile="birthYear" min="1930" max="' + new Date().getFullYear() + '" value="' + (p.birthYear || '') + '"></label>' +
     '<label>Рост, см<input type="number" inputmode="numeric" data-profile="height" min="100" max="250" value="' + (p.height || '') + '"></label></div>' +
     '<p id="bmi" class="small">' + bmiHtml() + '</p></div>' +
+    startCardHtml() + testCardHtml() + progressTableHtml() +
     '<h2>Вес тела</h2><div class="card"><div class="form-grid three"><label>Вес, кг<input type="number" inputmode="decimal" step="0.1" min="30" max="300" id="w-kg" placeholder="' + (currentBW() || '80') + '"></label>' +
     '<label>Дата<input type="date" id="w-date" value="' + todayStr() + '" max="' + todayStr() + '"></label>' +
     '<button class="btn primary" data-act="addWeight">Записать</button></div>' +
@@ -441,10 +456,23 @@ function sanitizeImport(obj) {
   if (!obj || typeof obj !== 'object' || !Array.isArray(obj.workouts)) return null;
   const st = normalizeState(obj);
   st.draft = null;
-  st.workouts = st.workouts.filter(w => w && DATE_RE.test(w.date) && Array.isArray(w.entries)).map(w => ({
-    id: String(w.id || uid()), date: w.date, note: String(w.note || ''),
-    entries: w.entries.filter(en => en && Array.isArray(en.sets)).map(en => ({ exId: String(en.exId), sets: en.sets.filter(s => s && typeof s === 'object') }))
-  }));
+  st.workouts = st.workouts.filter(w => w && DATE_RE.test(w.date) && Array.isArray(w.entries)).map(w => {
+    const o = {
+      id: String(w.id || uid()), date: w.date, note: String(w.note || ''),
+      entries: w.entries.filter(en => en && Array.isArray(en.sets)).map(en => ({ exId: String(en.exId), sets: en.sets.filter(s => s && typeof s === 'object') }))
+    };
+    if (w.dayId) o.dayId = String(w.dayId);
+    if (MODES[w.mode]) o.mode = w.mode;
+    if (w.test) o.test = true;
+    return o;
+  });
+  st.measures = st.measures.filter(m => m && DATE_RE.test(m.date)).map(m => {
+    const o = { date: m.date };
+    for (const k of Object.keys(GIRTHS)) if (+m[k] > 0) o[k] = +m[k];
+    return o;
+  });
+  if (!DATE_RE.test(st.profile.startDate || '')) st.profile.startDate = null;
+  if (!EXPERIENCE[st.profile.exp]) st.profile.exp = '';
   st.weights = st.weights.filter(w => w && DATE_RE.test(w.date) && +w.kg > 0).map(w => ({ date: w.date, kg: +w.kg }));
   st.injuries = st.injuries.filter(i => i && DATE_RE.test(i.date) && AREAS[i.area]).map(i => Object.assign({}, i, {
     id: String(i.id || uid()), severity: Math.min(3, Math.max(1, +i.severity || 1)),
@@ -483,6 +511,13 @@ function startDraft(d) {
   if (S.draft && S.draft.entries.length) confirmBox('Заменить текущую тренировку?', 'У вас есть несохранённая тренировка. Она будет удалена.', 'Заменить', begin, true);
   else begin();
 }
+/* Новое упражнение в тренировке: столько пустых подходов, сколько задаёт план */
+function addDraftEntry(ex) {
+  const d = S.draft, en = { exId: ex.id, sets: [] };
+  d.entries.push(en);
+  const p = d.test ? null : planFor(d, ex);
+  en.sets = Array.from({ length: p ? p.sets : 1 }, () => blankSet(ex));
+}
 function findWorkout(id) { return S.workouts.find(w => String(w.id) === id); }
 function findInjury(id) { return S.injuries.find(i => String(i.id) === id); }
 
@@ -496,8 +531,10 @@ const ACT = {
   range: el => { UI.range = +el.dataset.r; render(); },
 
   startWorkout: () => {
-    if (!S.draft) { S.draft = { id: null, date: todayStr(), note: '', entries: [] }; persist(); }
-    go('edit');
+    if (S.draft) { go('edit'); return; }
+    if (filledDays().length) { openStartChooser(); return; }   // есть программа — спрашиваем, какой день
+    S.draft = { id: null, date: todayStr(), note: '', entries: [] };
+    persist(); go('edit');
   },
   cancelDraft: () => {
     const drop = () => { S.draft = null; persist(); closeModal(); go('log'); };
@@ -509,8 +546,18 @@ const ACT = {
   newExForm: () => openCustomExForm(),
   addEx: el => {
     const ex = exById(el.dataset.id);
-    if (!ex || !S.draft) return;
-    S.draft.entries.push({ exId: ex.id, sets: [blankSet(ex)] });
+    if (!ex) return;
+    if (UI.pick.day != null) {   // добавляем в день программы; окно остаётся открытым, чтобы набрать несколько
+      const day = S.program && S.program.days[UI.pick.day];
+      if (!day) return;
+      if (day.items.some(it => it.exId === ex.id)) { toast('Уже есть в этом дне: ' + ex.name); return; }
+      if (day.items.length >= 30) { toast('В одном дне может быть не больше 30 упражнений'); return; }
+      day.items.push(Object.assign({ exId: ex.id }, modeDefaults(ex, day.mode)));
+      persist(); render(); toast('Добавлено: ' + ex.name);
+      return;
+    }
+    if (!S.draft) return;
+    addDraftEntry(ex);
     persist(); closeModal(); render();
     const cards = document.querySelectorAll('.entry');
     if (cards.length) cards[cards.length - 1].scrollIntoView({ block: 'center' });
@@ -522,7 +569,9 @@ const ACT = {
     document.querySelectorAll('input[name="cx-area"]:checked').forEach(c => { stress[c.value] = 2; });
     const ex = { id: 'c_' + uid(), name, muscle: $('#cx-muscle').value, type: $('#cx-type').value, stress, custom: true, bwf: 0.7 };
     S.customExercises.push(ex);
-    if (S.draft) S.draft.entries.push({ exId: ex.id, sets: [blankSet(ex)] });
+    const day = UI.pick.day != null && S.program ? S.program.days[UI.pick.day] : null;
+    if (day) day.items.push(Object.assign({ exId: ex.id }, modeDefaults(ex, day.mode)));
+    else if (S.draft && UI.pick.day == null) addDraftEntry(ex);
     persist(); closeModal(); render();
   },
   addSet: el => {
@@ -551,10 +600,13 @@ const ACT = {
     let w = d.id ? S.workouts.find(x => x.id === d.id) : null;
     if (w) { w.date = date; w.note = d.note || ''; w.entries = entries; }
     else { w = { id: uid(), date, note: d.note || '', entries }; S.workouts.push(w); }
+    if (d.dayId) w.dayId = d.dayId; else delete w.dayId;
+    if (MODES[d.mode] && !w.test) w.mode = d.mode; else delete w.mode;
     S.draft = null;
     persist();
-    const prs = workoutPRs(w);
+    const prs = w.test ? [] : workoutPRs(w);
     UI.open = {}; UI.open[w.id] = true;
+    UI.logSeg = 'hist';
     go('log');
     toast(prs.length ? 'Сохранено. Новый рекорд: ' + prs[0] + (prs.length > 1 ? ' и ещё ' + (prs.length - 1) : '') : 'Тренировка сохранена');
   },
@@ -562,7 +614,11 @@ const ACT = {
   toggleWk: el => { UI.open[el.dataset.id] = !UI.open[el.dataset.id]; render(); },
   repeatWk: el => {
     const w = findWorkout(el.dataset.id);
-    if (w) startDraft({ id: null, date: todayStr(), note: '', entries: JSON.parse(JSON.stringify(w.entries)) });
+    if (!w) return;
+    const d = { id: null, date: todayStr(), note: '', entries: JSON.parse(JSON.stringify(w.entries)) };
+    if (w.dayId && programDay(w.dayId)) d.dayId = w.dayId;
+    if (MODES[w.mode]) d.mode = w.mode;
+    startDraft(d);
   },
   editWk: el => {
     const w = findWorkout(el.dataset.id);
@@ -634,10 +690,10 @@ const ACT = {
   import: () => $('#imp').click(),
   demo: () => {
     const load = () => { S = buildDemoState(); persist(); closeModal(); UI.progEx = null; go('home'); toast('Загружены демо-данные за 12 недель'); };
-    if (S.workouts.length || S.weights.length) confirmBox('Загрузить демо-данные?', 'Текущие тренировки, вес и травмы будут заменены примером. Сначала сохраните копию, если они нужны.', 'Заменить', load, true);
+    if (S.workouts.length || S.weights.length) confirmBox('Загрузить демо-данные?', 'Текущие тренировки, программа, вес, замеры и травмы будут заменены примером. Сначала сохраните копию, если они нужны.', 'Заменить', load, true);
     else load();
   },
-  wipe: () => confirmBox('Стереть все данные?', 'Тренировки, вес, травмы и свои упражнения будут удалены с этого устройства без возможности восстановления.', 'Стереть', () => {
+  wipe: () => confirmBox('Стереть все данные?', 'Тренировки, программа, вес, замеры, травмы и свои упражнения будут удалены с этого устройства без возможности восстановления.', 'Стереть', () => {
     S = defaultState(); persist(); closeModal(); UI.progEx = null; go('home'); toast('Данные удалены');
   }, true),
   install: () => {
@@ -647,6 +703,7 @@ const ACT = {
     render();
   }
 };
+Object.assign(ACT, PROG_ACT);   // программа, режимы, проверка силы, стартовые показатели
 
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
@@ -674,6 +731,21 @@ document.addEventListener('input', e => {
   } else if (el.id === 'pick-q') {
     UI.pick.q = el.value;
     renderPickList();
+  } else if (el.dataset.pitem && S.program) {
+    // подходы и повторы в программе: сохраняем сразу, экран не перерисовываем, чтобы не сбить ввод
+    const p = el.dataset.pitem.split(':');
+    const day = S.program.days[+p[0]], it = day && day.items[+p[1]];
+    if (!it || !['sets', 'rmin', 'rmax'].includes(p[2])) return;
+    const v = el.value === '' ? NaN : Math.round(Number(el.value));
+    it[p[2]] = v >= 1 && v <= 100 ? v : null;
+    persist();
+    refreshProgSum();
+  } else if (el.dataset.pday != null && S.program) {
+    const day = S.program.days[+el.dataset.pday];
+    if (day) { day.name = el.value; persist(); }
+  } else if (el.dataset.prog === 'name' && S.program) {
+    S.program.name = el.value;
+    persist();
   }
 });
 document.addEventListener('change', e => {
@@ -686,6 +758,10 @@ document.addEventListener('change', e => {
     persist();
     const b = $('#bmi');
     if (b) b.innerHTML = bmiHtml();
+  } else if (el.dataset.prog === 'perWeek' && S.program) {
+    S.program.perWeek = clampInt(el.value, 1, 7, 3);
+    persist();
+    refreshProgSum();
   } else if (el.dataset.ui) {
     UI[el.dataset.ui] = el.value;
     render();
