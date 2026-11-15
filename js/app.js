@@ -20,16 +20,79 @@ function toast(msg) {
 function persist() {
   if (!save()) toast('Не удалось сохранить: память браузера недоступна');
 }
-function go(tab) { UI.tab = tab; render(); window.scrollTo(0, 0); }
+function go(tab) { UI.tab = tab; render(); window.scrollTo(0, 0); enterAnim(); }
+
+/* ---------- анимации ---------- */
+const calmMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+/* Появление экрана: блоки поднимаются по очереди. Только при смене экрана, не при каждой перерисовке. */
+function enterAnim() {
+  const v = $('#view');
+  v.classList.remove('enter');
+  void v.offsetWidth;            // перезапуск анимации
+  v.classList.add('enter');
+  clearTimeout(enterAnim._t);
+  enterAnim._t = setTimeout(() => v.classList.remove('enter'), 1200);
+  countUp(v);
+}
+/* Числа в кольцах рейтинга набегают от нуля */
+function countUp(root) {
+  if (calmMotion()) return;
+  root.querySelectorAll('.ring-num').forEach(el => {
+    const to = parseInt(el.textContent, 10);
+    if (!(to > 0)) return;
+    const t0 = performance.now();
+    const step = now => {
+      const k = Math.min(1, (now - t0) / 750);
+      el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3)));
+      if (k < 1 && el.isConnected) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+}
+/* Салют при новом рекорде */
+function celebrate() {
+  if (calmMotion() || !document.body.animate) return;
+  const box = document.createElement('div');
+  box.className = 'confetti';
+  document.body.appendChild(box);
+  const colors = [ACC, BLUE, GREEN, '#fbbf24', '#f472b6'];
+  for (let i = 0; i < 40; i++) {
+    const p = document.createElement('i');
+    p.style.background = colors[i % colors.length];
+    p.style.left = (50 + (Math.random() - 0.5) * 30) + '%';
+    box.appendChild(p);
+    const dx = (Math.random() - 0.5) * 340, dy = -(140 + Math.random() * 260), rot = (Math.random() - 0.5) * 900;
+    p.animate([
+      { transform: 'translate(0, 0) rotate(0deg)', opacity: 1 },
+      { transform: 'translate(' + dx * 0.7 + 'px, ' + dy + 'px) rotate(' + rot * 0.5 + 'deg)', opacity: 1, offset: 0.35 },
+      { transform: 'translate(' + dx + 'px, ' + (dy + 520) + 'px) rotate(' + rot + 'deg)', opacity: 0 }
+    ], { duration: 1500 + Math.random() * 700, easing: 'cubic-bezier(.2, .6, .4, 1)', fill: 'forwards' });
+  }
+  setTimeout(() => box.remove(), 2500);
+}
 
 function openModal(html) {
   $('#modal-root').innerHTML = '<div class="backdrop" data-act="backdrop"><div class="sheet" role="dialog" aria-modal="true">' + html + '</div></div>';
   document.body.classList.add('noscroll');
+  countUp($('#modal-root'));
 }
+/* Окно не исчезает мгновенно, а уезжает; если сразу открыть новое, оно просто заменит уходящее */
 function closeModal() {
-  $('#modal-root').innerHTML = '';
+  const el = $('#modal-root').firstElementChild;
+  if (el && !el.classList.contains('out')) {
+    if (calmMotion()) el.remove();
+    else {
+      el.classList.add('out');
+      setTimeout(() => { if (el.parentNode) el.remove(); }, 190);
+    }
+  }
   document.body.classList.remove('noscroll');
   confirmCb = null;
+}
+function modalOpen() {
+  const el = $('#modal-root').firstElementChild;
+  return !!el && !el.classList.contains('out');
 }
 function confirmBox(title, text, yes, cb, danger) {
   openModal('<h3>' + esc(title) + '</h3><p class="muted">' + esc(text) + '</p>' +
@@ -95,7 +158,7 @@ function workoutCard(w, forceOpen) {
     ' · ' + nsets + ' ' + plural(nsets, 'подход', 'подхода', 'подходов') + (vol ? ' · ' + fmtNum(vol, 0) + ' кг' : '') + '</div></div>' +
     (forceOpen ? '' : '<span class="chev' + (open ? ' up' : '') + '">›</span>') + '</div>';
   if (open) {
-    html += '<div class="wk-body">' + (w.note ? '<p class="note">' + esc(w.note) + '</p>' : '');
+    html += '<div class="wk-body' + (UI.fresh === w.id ? ' fresh' : '') + '">' + (w.note ? '<p class="note">' + esc(w.note) + '</p>' : '');
     for (const en of exs) {
       const ex = exById(en.exId);
       const sets = (en.sets || []).filter(s => isValidSet(ex, s));
@@ -151,7 +214,7 @@ function entryCard(en, i) {
   const prev = hint.lastSets;
   en.sets.forEach((s, j) => {
     const ps = prev.length ? prev[Math.min(j, prev.length - 1)] : null;   // прошлый результат — серой подсказкой
-    html += '<div class="set"><span class="n">' + (j + 1) + '</span>' +
+    html += '<div class="set' + (isValidSet(ex, s) ? ' done' : '') + '"><span class="n">' + (j + 1) + '</span>' +
       fields.map(f => '<input type="number" inputmode="decimal" step="any" min="0" aria-label="' + f[1] + '" data-set="' + i + ':' + j + ':' + f[0] + '" value="' + (s[f[0]] == null ? '' : s[f[0]]) + '" placeholder="' + (ps && ps[f[0]] ? ps[f[0]] : '') + '">').join('') +
       '<button class="x" data-act="delSet" data-i="' + i + '" data-j="' + j + '" aria-label="Удалить подход">✕</button></div>';
   });
@@ -167,22 +230,25 @@ function viewEdit() {
     '<label>Заметка<input type="text" data-draft="note" value="' + esc(d.note || '') + '" placeholder="Самочувствие, сон, настроение"></label></div>' +
     draftModeCard(d) +
     '<div class="card rest"><span>Отдых</span><div class="chips">' + [60, 90, 120, 180].map(s => '<button' + (s === sug ? ' class="sug"' : '') + ' data-act="rest" data-sec="' + s + '">' + s + ' с</button>').join('') +
-    '</div><b id="rest-out"></b></div>' +
+    '</div><b id="rest-out"></b><div class="rest-bar"><i id="rest-bar"></i></div></div>' +
     d.entries.map(entryCard).join('') +
     '<button class="btn dashed big" data-act="pickEx">＋ Добавить упражнение</button>' +
     '<div class="savebar"><button class="btn primary big" data-act="saveDraft">Сохранить тренировку</button></div>';
 }
 
-const REST = { end: 0, int: null };
+const REST = { end: 0, total: 0, int: null };
 function updRest() {
-  const el = $('#rest-out');
+  const el = $('#rest-out'), bar = $('#rest-bar');
   const left = Math.ceil((REST.end - Date.now()) / 1000);
   if (REST.end && left <= 0) {
     clearInterval(REST.int); REST.end = 0;
     if (navigator.vibrate) navigator.vibrate([250, 120, 250]);
     toast('Отдых закончен — следующий подход');
+    const card = $('.rest');
+    if (card) { card.classList.remove('ping'); void card.offsetWidth; card.classList.add('ping'); }
   }
   if (el) el.textContent = REST.end ? Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') : '';
+  if (bar) bar.style.width = REST.end && REST.total ? Math.max(0, Math.min(100, (REST.end - Date.now()) / REST.total * 100)) + '%' : '0%';
 }
 
 /* ---------- Выбор упражнения ---------- */
@@ -526,7 +592,7 @@ const ACT = {
   closeModal: () => closeModal(),
   confirmYes: () => { const cb = confirmCb; if (cb) cb(); },
   openRating: () => { UI.seg = 'rating'; go('progress'); },
-  seg: el => { UI.seg = el.dataset.seg; render(); },
+  seg: el => { UI.seg = el.dataset.seg; render(); enterAnim(); },
   metric: el => { UI.metric = el.dataset.m; render(); },
   range: el => { UI.range = +el.dataset.r; render(); },
 
@@ -583,7 +649,8 @@ const ACT = {
   delEntry: el => { S.draft.entries.splice(+el.dataset.i, 1); persist(); render(); },
   rest: el => {
     clearInterval(REST.int);
-    REST.end = Date.now() + (+el.dataset.sec) * 1000;
+    REST.total = (+el.dataset.sec) * 1000;
+    REST.end = Date.now() + REST.total;
     REST.int = setInterval(updRest, 250);
     updRest();
   },
@@ -608,10 +675,16 @@ const ACT = {
     UI.open = {}; UI.open[w.id] = true;
     UI.logSeg = 'hist';
     go('log');
+    if (prs.length) celebrate();
     toast(prs.length ? 'Сохранено. Новый рекорд: ' + prs[0] + (prs.length > 1 ? ' и ещё ' + (prs.length - 1) : '') : 'Тренировка сохранена');
   },
 
-  toggleWk: el => { UI.open[el.dataset.id] = !UI.open[el.dataset.id]; render(); },
+  toggleWk: el => {
+    UI.open[el.dataset.id] = !UI.open[el.dataset.id];
+    UI.fresh = UI.open[el.dataset.id] ? el.dataset.id : null;   // раскрывается с анимацией только эта карточка
+    render();
+    UI.fresh = null;
+  },
   repeatWk: el => {
     const w = findWorkout(el.dataset.id);
     if (!w) return;
@@ -713,7 +786,7 @@ document.addEventListener('click', e => {
   if (ACT[a]) ACT[a](el, e);
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && $('#modal-root').firstChild) { closeModal(); return; }
+  if (e.key === 'Escape' && modalOpen()) { closeModal(); return; }
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[role="button"][data-act]')) { e.preventDefault(); e.target.click(); }
 });
 document.addEventListener('input', e => {
@@ -725,6 +798,12 @@ document.addEventListener('input', e => {
     const v = el.value === '' ? null : Number(el.value);
     en.sets[+p[1]][p[2]] = v == null || isNaN(v) || v < 0 ? null : v;
     persist();
+    const row = el.closest('.set'), ex = exById(en.exId);   // заполненный подход отмечается зелёным
+    if (row && ex) {
+      const ok = isValidSet(ex, en.sets[+p[1]]);
+      if (ok && !row.classList.contains('done')) row.classList.add('just');
+      row.classList.toggle('done', ok);
+    }
   } else if (el.dataset.draft && S.draft) {
     S.draft[el.dataset.draft] = el.value;
     persist();
@@ -781,3 +860,4 @@ if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
 }
 
 render();
+enterAnim();

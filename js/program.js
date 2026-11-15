@@ -235,7 +235,7 @@ function progressTableHtml() {
 
 /* ---------- действия ---------- */
 const PROG_ACT = {
-  logSeg: el => { UI.logSeg = el.dataset.seg; render(); },
+  logSeg: el => { UI.logSeg = el.dataset.seg; render(); enterAnim(); },
   openProgram: () => { closeModal(); UI.logSeg = 'prog'; go('log'); },
   progNew: () => { S.program = { name: '', perWeek: 3, days: [{ id: uid(), name: '', mode: 'mid', items: [] }] }; persist(); render(); },
   progAddDay: () => {

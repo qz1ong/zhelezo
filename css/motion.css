@@ -1,0 +1,149 @@
+/* Анимации и отделка интерфейса. Подключается после styles.css и дополняет его. */
+
+:root {
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ---------- фон и поверхности ---------- */
+body::before {
+  content: ""; position: fixed; left: 0; right: 0; top: 0; height: 340px; z-index: -1; pointer-events: none;
+  background: radial-gradient(90% 100% at 50% 0%, rgba(255, 122, 26, 0.13), rgba(255, 122, 26, 0) 70%);
+}
+.card, .stats > div {
+  background: linear-gradient(180deg, #1a1f29, #151920);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 14px 28px -22px rgba(0, 0, 0, 0.9);
+  transition: border-color 0.2s, transform 0.2s var(--ease), box-shadow 0.2s;
+}
+.stats b, .ring-num, .cmp > span, #rest-out { font-variant-numeric: tabular-nums; }
+h1 { letter-spacing: -0.03em; }
+
+/* карточки, на которые можно нажать */
+button.card, .rec[data-act], .wk-head[data-act], .pick { transition: border-color 0.2s, transform 0.15s var(--ease), background 0.2s; }
+@media (hover: hover) {
+  button.card:hover, .rec[data-act]:hover { border-color: #3d4658; transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 18px 30px -20px rgba(0, 0, 0, 1); }
+  .wk-head[data-act]:hover { background: rgba(255, 255, 255, 0.025); }
+}
+button.card:active, .rec[data-act]:active { transform: scale(0.985); }
+
+/* рекомендации: лёгкий оттенок по смыслу */
+.rec { background: linear-gradient(90deg, rgba(78, 168, 255, 0.07), rgba(78, 168, 255, 0) 55%), linear-gradient(180deg, #1a1f29, #151920); }
+.rec.good { background: linear-gradient(90deg, rgba(52, 211, 153, 0.08), rgba(52, 211, 153, 0) 55%), linear-gradient(180deg, #1a1f29, #151920); }
+.rec.warn { background: linear-gradient(90deg, rgba(251, 191, 36, 0.08), rgba(251, 191, 36, 0) 55%), linear-gradient(180deg, #1a1f29, #151920); }
+.rec.danger { background: linear-gradient(90deg, rgba(248, 113, 113, 0.1), rgba(248, 113, 113, 0) 55%), linear-gradient(180deg, #1a1f29, #151920); }
+.rec.inner { box-shadow: none; }
+.plan-today {
+  background: linear-gradient(135deg, rgba(255, 122, 26, 0.16), rgba(255, 122, 26, 0.02) 60%), linear-gradient(180deg, #1a1f29, #151920);
+}
+
+/* ---------- кнопки и поля ---------- */
+.btn { transition: transform 0.12s var(--ease), background 0.15s, border-color 0.15s, box-shadow 0.2s; }
+.btn:active { transform: scale(0.96); }
+.btn.primary { background: linear-gradient(180deg, #ff8d38, #ff6f0d); border-color: #ff7a1a; box-shadow: 0 10px 22px -12px rgba(255, 122, 26, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.22); }
+.btn.primary:hover { background: linear-gradient(180deg, #ff9a4d, #ff7a1a); }
+.btn.dashed { transition: border-color 0.2s, color 0.2s, transform 0.12s var(--ease); }
+.btn.dashed:hover { border-color: var(--acc); color: var(--acc); background: none; }
+.x { transition: background 0.15s, color 0.15s, transform 0.12s var(--ease); }
+.x:active { transform: scale(0.88); }
+.chips button, .pain button { transition: background 0.18s, border-color 0.18s, color 0.18s, transform 0.12s var(--ease); }
+.chips button:active, .pain button:active { transform: scale(0.94); }
+.pain button.on { animation: pop 0.28s var(--ease); }
+.seg button { transition: background 0.2s, color 0.2s; }
+.seg button.on { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 10px -6px rgba(0, 0, 0, 0.8); }
+input[type="text"], input[type="number"], input[type="date"], input[type="search"], select, textarea { transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
+input:focus, select:focus, textarea:focus { box-shadow: 0 0 0 3px rgba(255, 122, 26, 0.18); }
+
+/* ---------- навигация ---------- */
+#nav button { position: relative; transition: color 0.2s, background 0.2s; }
+#nav button::before {
+  content: ""; position: absolute; top: 0; left: 50%; width: 0; height: 3px; border-radius: 0 0 4px 4px;
+  background: var(--acc); transform: translateX(-50%); transition: width 0.28s var(--ease);
+}
+#nav button.on::before { width: 30px; }
+#nav button.on svg { animation: pop 0.36s var(--ease); }
+#nav button:active svg { transform: scale(0.88); }
+#nav svg { transition: transform 0.12s var(--ease); }
+@media (min-width: 900px) {
+  #nav button::before { top: 50%; left: 0; width: 3px; height: 0; border-radius: 0 4px 4px 0; transform: translateY(-50%); transition: height 0.28s var(--ease); }
+  #nav button.on::before { width: 3px; height: 22px; }
+}
+
+/* ---------- появление экрана ---------- */
+#view.enter > * { animation: rise 0.42s var(--ease) both; }
+#view.enter > *:nth-child(2) { animation-delay: 40ms; }
+#view.enter > *:nth-child(3) { animation-delay: 80ms; }
+#view.enter > *:nth-child(4) { animation-delay: 120ms; }
+#view.enter > *:nth-child(5) { animation-delay: 160ms; }
+#view.enter > *:nth-child(6) { animation-delay: 200ms; }
+#view.enter > *:nth-child(7) { animation-delay: 240ms; }
+#view.enter > *:nth-child(8) { animation-delay: 280ms; }
+#view.enter > *:nth-child(n+9) { animation-delay: 320ms; }
+/* липкая кнопка сохранения не должна уезжать вместе с остальными */
+#view.enter > .savebar { animation-name: fade-in; }
+
+/* кольца рейтинга и шкалы заполняются */
+#view.enter .ring-arc, .sheet .ring-arc { animation: ring 1s var(--ease) 0.12s both; }
+#view.enter .bar i, .sheet .bar i { transform-origin: 0 50%; animation: grow-x 0.8s var(--ease) 0.15s both; }
+.wk-body.fresh { animation: open-body 0.26s var(--ease); }
+.chev { transition: transform 0.2s var(--ease); }
+details[open] > summary ~ * { animation: open-body 0.24s var(--ease); }
+
+/* ---------- графики ---------- */
+.chart .ln { stroke-dasharray: 1; animation: draw 0.95s ease-out both; }
+.chart .area { animation: fade-in 0.6s ease-out 0.45s both; }
+.chart .dot { animation: fade-in 0.35s ease-out 0.7s both; }
+.chart .bar-r { transform-box: fill-box; transform-origin: 50% 100%; animation: grow-y 0.55s var(--ease) both; }
+.tip { transition: left 0.08s linear, top 0.08s linear; }
+
+/* ---------- тренировка ---------- */
+.set .n { display: block; border-radius: 8px; line-height: 26px; transition: background 0.2s, color 0.2s; }
+.set.done .n { background: rgba(52, 211, 153, 0.18); color: var(--good); }
+.set.just .n { animation: pop 0.3s var(--ease); }
+.set.done input { border-color: rgba(52, 211, 153, 0.35); }
+.rest { position: relative; overflow: hidden; }
+.rest-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: transparent; }
+.rest-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ff6f0d, #ffb267); border-radius: 0 3px 3px 0; transition: width 0.3s linear; }
+.rest.ping { animation: ping 0.9s ease-out; }
+.savebar .btn { box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6), 0 10px 22px -12px rgba(255, 122, 26, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.22); }
+
+/* ---------- окна ---------- */
+.backdrop { animation: fade-in 0.2s ease-out both; }
+.sheet { animation: sheet-up 0.32s var(--ease) both; box-shadow: 0 -20px 60px rgba(0, 0, 0, 0.6); }
+.backdrop.out { animation: fade-out 0.19s ease-in both; pointer-events: none; }
+.backdrop.out .sheet { animation: sheet-down 0.19s ease-in both; }
+@media (max-width: 619px) {
+  .sheet::before { content: ""; flex: none; width: 40px; height: 4px; border-radius: 4px; background: #3a4252; margin: -6px auto 12px; }
+}
+@media (min-width: 620px) {
+  .sheet { animation-name: sheet-pop; }
+  .backdrop.out .sheet { animation-name: sheet-unpop; }
+}
+
+/* ---------- сообщение и салют ---------- */
+#toast { transition: opacity 0.22s, transform 0.3s var(--ease); }
+.confetti { position: fixed; inset: 0; pointer-events: none; z-index: 90; overflow: hidden; }
+.confetti i { position: absolute; top: 62%; width: 8px; height: 13px; border-radius: 2px; }
+
+/* тонкая полоса прокрутки на ПК */
+@media (min-width: 900px) {
+  * { scrollbar-width: thin; scrollbar-color: #2f3644 transparent; }
+}
+
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes pop { 45% { transform: scale(1.14); } }
+@keyframes ring { from { stroke-dasharray: 0 var(--c); } }
+@keyframes grow-x { from { transform: scaleX(0); } }
+@keyframes grow-y { from { transform: scaleY(0); } }
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes open-body { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } }
+@keyframes sheet-down { to { transform: translateY(40px); opacity: 0; } }
+@keyframes sheet-pop { from { transform: scale(0.95) translateY(8px); opacity: 0; } }
+@keyframes sheet-unpop { to { transform: scale(0.96); opacity: 0; } }
+@keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(255, 122, 26, 0.55); } 100% { box-shadow: 0 0 0 16px rgba(255, 122, 26, 0); } }
+
+/* Если в системе включено «уменьшить движение» — всё появляется сразу */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0s !important; transition-duration: 0.01ms !important; }
+}

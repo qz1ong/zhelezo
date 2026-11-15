@@ -53,11 +53,12 @@ function drawLine(cfg, W, H) {
     const d = pts.map((q, i) => (i ? 'L' : 'M') + q.X.toFixed(1) + ' ' + q.Y.toFixed(1)).join(' ');
     if (series.length === 1 && pts.length > 1) {
       const base = (H - m.b).toFixed(1);
-      g += '<path d="' + d + ' L' + pts[pts.length - 1].X.toFixed(1) + ' ' + base + ' L' + pts[0].X.toFixed(1) + ' ' + base + ' Z" fill="' + s.color + '" opacity="0.13"/>';
+      g += '<path d="' + d + ' L' + pts[pts.length - 1].X.toFixed(1) + ' ' + base + ' L' + pts[0].X.toFixed(1) + ' ' + base + ' Z" class="area" fill="' + s.color + '" opacity="0.13"/>';
     }
-    g += '<path d="' + d + '" fill="none" stroke="' + s.color + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+    // pathLength="1" — чтобы линия «рисовалась» одной и той же анимацией при любой длине
+    g += '<path class="ln" pathLength="1" d="' + d + '" fill="none" stroke="' + s.color + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
     if (pts.length <= 45) {
-      for (const q of pts) g += '<circle cx="' + q.X.toFixed(1) + '" cy="' + q.Y.toFixed(1) + '" r="3.2" fill="var(--bg)" stroke="' + s.color + '" stroke-width="2"/>';
+      for (const q of pts) g += '<circle class="dot" cx="' + q.X.toFixed(1) + '" cy="' + q.Y.toFixed(1) + '" r="3.2" fill="var(--bg)" stroke="' + s.color + '" stroke-width="2"/>';
     }
     for (const q of pts) hit.push(q);
   });
@@ -92,7 +93,7 @@ function drawBars(cfg, W, H) {
   bars.forEach((b, i) => {
     const x = m.l + i * bw, w = Math.max(2, bw * 0.68), y = py(b.y), h = H - m.b - y;
     const cx = x + bw / 2;
-    if (b.y > 0) g += '<rect x="' + (cx - w / 2).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + Math.max(1, h).toFixed(1) + '" rx="4" fill="' + (cfg.color || 'var(--acc)') + '"' + (i === bars.length - 1 ? '' : ' opacity="0.75"') + '/>';
+    if (b.y > 0) g += '<rect class="bar-r" style="animation-delay:' + Math.min(i * 30, 400) + 'ms" x="' + (cx - w / 2).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + Math.max(1, h).toFixed(1) + '" rx="4" fill="' + (cfg.color || 'var(--acc)') + '"' + (i === bars.length - 1 ? '' : ' opacity="0.75"') + '/>';
     if (i % every === 0 || i === bars.length - 1) g += '<text class="axis" x="' + cx.toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + b.label + '</text>';
     hit.push({ X: cx, Y: y, bar: b });
   });
@@ -161,6 +162,6 @@ function ringSvg(score, color) {
   const r = 42, c = 2 * Math.PI * r, p = score == null ? 0 : Math.max(0, Math.min(100, score)) / 100;
   return '<svg class="ring-svg" viewBox="0 0 100 100">' +
     '<circle cx="50" cy="50" r="' + r + '" fill="none" stroke="var(--line)" stroke-width="9"/>' +
-    (p > 0 ? '<circle cx="50" cy="50" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + (c * p).toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 50 50)"/>' : '') +
+    (p > 0 ? '<circle class="ring-arc" style="--c:' + c.toFixed(1) + '" cx="50" cy="50" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + (c * p).toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 50 50)"/>' : '') +
     '<text x="50" y="58" text-anchor="middle" class="ring-num">' + (score == null ? '—' : Math.round(score)) + '</text></svg>';
 }
