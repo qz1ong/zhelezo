@@ -1,5 +1,5 @@
 /* Офлайн-режим: сначала сеть (чтобы обновления приходили сразу), без сети — из кэша */
-const CACHE = 'zhelezo-v3';
+const CACHE = 'zhelezo-v4';
 const ASSETS = [
   './', 'index.html', 'css/styles.css', 'css/motion.css',
   'js/data.js', 'js/store.js', 'js/calc.js', 'js/charts.js', 'js/program.js', 'js/app.js',
@@ -22,7 +22,7 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(req)
+    fetch(req, { cache: 'no-cache' })   // сверяемся с сервером, чтобы обновление приходило целиком, а не по частям
       .then(res => {
         if (res && res.ok) {
           const copy = res.clone();
