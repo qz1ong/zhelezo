@@ -6,7 +6,8 @@ const STORE_KEY = 'zhelezo.v1';
 function defaultState() {
   return {
     v: 1,
-    profile: { name: '', sex: 'm', birthYear: null, height: null, startDate: null, exp: '' },
+    profile: { name: '', sex: 'm', birthYear: null, height: null, startDate: null, exp: '', goal: '', focus: '', goalKg: null, kcalTarget: null, perWeek: null, onboarded: false },
+    food: [],             // {id, date, kcal, protein, note} — записи о еде
     measures: [],         // {date, chest, waist, biceps, thigh} — обхваты в см
     program: null,        // {name, perWeek, days:[{id, name, mode, items:[{exId, sets, rmin, rmax}]}]}
     weights: [],          // {date, kg}
@@ -28,7 +29,7 @@ function loadState() {
 function normalizeState(obj) {
   const st = Object.assign(defaultState(), obj || {});
   st.profile = Object.assign(defaultState().profile, st.profile || {});
-  for (const k of ['weights', 'workouts', 'customExercises', 'injuries', 'measures']) {
+  for (const k of ['weights', 'workouts', 'customExercises', 'injuries', 'measures', 'food']) {
     if (!Array.isArray(st[k])) st[k] = [];
   }
   st.program = normalizeProgram(st.program);

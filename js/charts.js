@@ -79,7 +79,7 @@ function drawBars(cfg, W, H) {
   const bars = cfg.bars;
   if (!bars.length || !bars.some(b => b.y > 0)) return { html: chartEmpty(cfg.empty), hit: null };
   const m = { l: 44, r: 8, t: 12, b: 26 };
-  const sc = niceTicks(0, Math.max.apply(null, bars.map(b => b.y)), 4);
+  const sc = niceTicks(0, Math.max(cfg.line || 0, Math.max.apply(null, bars.map(b => b.y))), 4);
   const bw = (W - m.l - m.r) / bars.length;
   const py = v => H - m.b - (v - sc.lo) / (sc.hi - sc.lo) * (H - m.t - m.b);
   let g = '';
@@ -97,6 +97,10 @@ function drawBars(cfg, W, H) {
     if (i % every === 0 || i === bars.length - 1) g += '<text class="axis" x="' + cx.toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + b.label + '</text>';
     hit.push({ X: cx, Y: y, bar: b });
   });
+  if (cfg.line > 0) {   // целевой уровень, например норма калорий
+    const ly = py(cfg.line).toFixed(1);
+    g += '<line class="target" x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + ly + '" y2="' + ly + '"/>';
+  }
   return {
     html: '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" role="img">' + g + '</svg><div class="tip" style="display:none"></div>',
     hit

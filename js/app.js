@@ -103,7 +103,7 @@ function confirmBox(title, text, yes, cb, danger) {
 
 function render() {
   CHARTS = {};
-  const views = { home: viewHome, log: viewLog, edit: viewEdit, progress: viewProgress, injuries: viewInjuries, profile: viewProfile };
+  const views = { home: viewHome, log: viewLog, edit: viewEdit, food: viewFood, progress: viewProgress, injuries: viewInjuries, profile: viewProfile };
   if (UI.tab === 'edit' && !S.draft) UI.tab = 'log';
   $('#view').innerHTML = views[UI.tab]();
   const navTab = UI.tab === 'edit' ? 'log' : UI.tab;
@@ -134,7 +134,7 @@ function viewHome() {
   const name = (S.profile.name || '').trim();
   return '<header class="top"><div><div class="muted">' + fmtDateLong(t) + '</div><h1>' + (name ? 'Привет, ' + esc(name) + '!' : 'Железо') + '</h1></div></header>' +
     '<button class="btn primary big" data-act="startWorkout">' + (S.draft ? 'Продолжить тренировку' : 'Начать тренировку') + '</button>' +
-    todayPlanCard() +
+    todayPlanCard() + goalCard() +
     '<div class="grid2">' + ratingCard('Сила', sr, ACC) + ratingCard('Выносливость', er, BLUE) + '</div>' +
     '<div class="stats">' +
     '<div><b>' + in7.length + '</b><span>' + plural(in7.length, 'тренировка', 'тренировки', 'тренировок') + ' за 7 дней</span></div>' +
@@ -493,7 +493,7 @@ function viewProfile() {
     '<label>Год рождения<input type="number" inputmode="numeric" data-profile="birthYear" min="1930" max="' + new Date().getFullYear() + '" value="' + (p.birthYear || '') + '"></label>' +
     '<label>Рост, см<input type="number" inputmode="numeric" data-profile="height" min="100" max="250" value="' + (p.height || '') + '"></label></div>' +
     '<p id="bmi" class="small">' + bmiHtml() + '</p></div>' +
-    startCardHtml() + testCardHtml() + progressTableHtml() +
+    goalProfileHtml() + startCardHtml() + testCardHtml() + progressTableHtml() +
     '<h2>Вес тела</h2><div class="card"><div class="form-grid three"><label>Вес, кг<input type="number" inputmode="decimal" step="0.1" min="30" max="300" id="w-kg" placeholder="' + (currentBW() || '80') + '"></label>' +
     '<label>Дата<input type="date" id="w-date" value="' + todayStr() + '" max="' + todayStr() + '"></label>' +
     '<button class="btn primary" data-act="addWeight">Записать</button></div>' +
@@ -539,6 +539,17 @@ function sanitizeImport(obj) {
   });
   if (!DATE_RE.test(st.profile.startDate || '')) st.profile.startDate = null;
   if (!EXPERIENCE[st.profile.exp]) st.profile.exp = '';
+  st.food = st.food.filter(f => f && DATE_RE.test(f.date) && +f.kcal > 0 && +f.kcal <= 10000).map(f => ({
+    id: String(f.id || uid()), date: f.date, kcal: Math.round(+f.kcal),
+    protein: +f.protein > 0 && +f.protein <= 500 ? +f.protein : null, note: String(f.note || '').slice(0, 60)
+  }));
+  const pr = st.profile;
+  if (!GOALS[pr.goal]) pr.goal = '';
+  if (!MODES[pr.focus]) pr.focus = '';
+  pr.goalKg = +pr.goalKg >= 30 && +pr.goalKg <= 300 ? +pr.goalKg : null;
+  pr.kcalTarget = +pr.kcalTarget >= 800 && +pr.kcalTarget <= 6000 ? Math.round(+pr.kcalTarget) : null;
+  pr.perWeek = +pr.perWeek >= 1 && +pr.perWeek <= 7 ? Math.round(+pr.perWeek) : null;
+  pr.onboarded = true;   // в копии уже есть данные — анкету первого запуска не показываем
   st.weights = st.weights.filter(w => w && DATE_RE.test(w.date) && +w.kg > 0).map(w => ({ date: w.date, kg: +w.kg }));
   st.injuries = st.injuries.filter(i => i && DATE_RE.test(i.date) && AREAS[i.area]).map(i => Object.assign({}, i, {
     id: String(i.id || uid()), severity: Math.min(3, Math.max(1, +i.severity || 1)),
@@ -766,8 +777,8 @@ const ACT = {
     if (S.workouts.length || S.weights.length) confirmBox('Загрузить демо-данные?', 'Текущие тренировки, программа, вес, замеры и травмы будут заменены примером. Сначала сохраните копию, если они нужны.', 'Заменить', load, true);
     else load();
   },
-  wipe: () => confirmBox('Стереть все данные?', 'Тренировки, программа, вес, замеры, травмы и свои упражнения будут удалены с этого устройства без возможности восстановления.', 'Стереть', () => {
-    S = defaultState(); persist(); closeModal(); UI.progEx = null; go('home'); toast('Данные удалены');
+  wipe: () => confirmBox('Стереть все данные?', 'Тренировки, программа, питание, вес, замеры, травмы и свои упражнения будут удалены с этого устройства без возможности восстановления.', 'Стереть', () => {
+    S = defaultState(); S.profile.onboarded = true; persist(); closeModal(); UI.progEx = null; go('home'); toast('Данные удалены');
   }, true),
   install: () => {
     if (!deferredInstall) return;
@@ -777,6 +788,7 @@ const ACT = {
   }
 };
 Object.assign(ACT, PROG_ACT);   // программа, режимы, проверка силы, стартовые показатели
+Object.assign(ACT, NUTR_ACT);   // питание, цель, первый запуск, готовые программы
 
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
@@ -832,11 +844,12 @@ document.addEventListener('change', e => {
   if (el.dataset.profile) {
     const k = el.dataset.profile;
     let v = el.value;
-    if (k === 'birthYear' || k === 'height') v = v === '' ? null : +v;
+    if (['birthYear', 'height', 'goalKg', 'kcalTarget'].includes(k)) v = v === '' || isNaN(+v) ? null : +v;
     S.profile[k] = v;
     persist();
     const b = $('#bmi');
     if (b) b.innerHTML = bmiHtml();
+    if (UI.tab === 'food') render();   // своя норма калорий сразу меняет экран питания
   } else if (el.dataset.prog === 'perWeek' && S.program) {
     S.program.perWeek = clampInt(el.value, 1, 7, 3);
     persist();
@@ -861,3 +874,4 @@ if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
 
 render();
 enterAnim();
+if (needsOnboard()) openOnboard(0);   // первый запуск: имя, цель, тип тренировок

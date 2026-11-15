@@ -506,7 +506,8 @@ function programRemarks() {
     out.push({ k: 'warn', act: 'openProgram', title: 'В программе мало работы на ноги',
       text: 'На ноги приходится ' + rd(100 * legs / total) + ' % подходов. Ориентир — 25–35 %.' });
   }
-  const over = major.filter(m => m[2] > 24);
+  // перебор считаем по самой группе: ягодицы и икры к ногам здесь не прибавляем
+  const over = [['chest', '', g('chest')], ['back', '', g('back')], ['legs', '', g('legs')]].filter(m => m[2] > 24);
   if (over.length) {
     out.push({ k: 'warn', act: 'openProgram', title: 'Слишком большой объём',
       text: over.map(m => MUSCLES[m[0]] + ' — около ' + rd(m[2])).join(', ') + ' подходов в неделю. Обычно хватает 10–20 на группу: сверх этого растёт усталость, а не результат.' });
@@ -525,7 +526,7 @@ function programRemarks() {
   const modes = filled.map(d => d.mode);
   if (modes.every(m => m === 'str') && S.program.perWeek >= 4) {
     out.push({ k: 'warn', act: 'openProgram', title: 'Все дни силовые',
-      text: 'Тяжёлая работа на 4–6 повторов ' + S.program.perWeek + ' раз в неделю плохо восстанавливается. Сделайте один-два дня «На массу» или «Многоповторку».' });
+      text: 'Тяжёлая работа на 4–6 повторов ' + S.program.perWeek + ' ' + plural(S.program.perWeek, 'раз', 'раза', 'раз') + ' в неделю плохо восстанавливается. Сделайте один-два дня «На массу» или «Многоповторку».' });
   }
   if (modes.every(m => m === 'hi')) {
     out.push({ k: 'info', act: 'openProgram', title: 'Только многоповторка',
@@ -742,6 +743,9 @@ function recommendations() {
   if (!S.weights.length) {
     out.push({ k: 'info', title: 'Укажите вес тела', text: 'Рейтинг силы считается относительно веса тела. Добавьте его в профиле.', go: 'profile' });
   }
+  // цель: темп изменения веса и соответствие программы цели (похвалу оставляем для экрана питания)
+  for (const r of goalAdvice()) if (r.k !== 'good' && r.title !== 'Взвешивайтесь раз в неделю') out.push(r);
+
   // своя программа и проверка силы
   const filled = filledDays();
   if (!S.program) {
@@ -902,6 +906,16 @@ function buildDemoState() {
     { id: 'demoB', name: 'Спина', mode: 'str', items: [it('deadlift', 3, 4, 6), it('pullup', 3, 4, 6), it('bb_row', 3, 4, 6), it('db_curl', 3, 8, 12), it('plank', 1, 0, 0)] },
     { id: 'demoC', name: 'Ноги', mode: 'mid', items: [it('squat', 3, 8, 12), it('leg_press', 3, 8, 12), it('rdl', 3, 8, 12), it('calf_raise', 3, 8, 12)] }
   ] };
+  // цель и питание: набор массы, записи о еде почти за все последние дни
+  Object.assign(st.profile, { goal: 'gain', focus: 'mid', goalKg: 84, perWeek: 3, onboarded: true });
+  const meals = [['Завтрак', 720, 34], ['Обед', 1000, 50], ['Ужин', 880, 46], ['Перекус', 420, 20]];
+  for (let i = 9; i >= 0; i--) {
+    if (i === 6 || i === 3) continue;
+    meals.forEach((m, j) => {
+      if (i === 0 && j > 1) return;   // сегодня день ещё не закончен
+      st.food.push({ id: 'demoF' + i + '_' + j, date: addDays(t, -i), kcal: m[1] + ((i * 37 + j * 53) % 9 - 4) * 20, protein: m[2] + (i + j) % 5 - 2, note: m[0] });
+    });
+  }
   const t0 = addDays(start, -2);
   st.profile.startDate = t0;
   if (!st.profile.exp) st.profile.exp = 'mid';

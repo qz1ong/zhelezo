@@ -75,7 +75,7 @@ function viewProgram() {
   const p = S.program;
   if (!p) {
     return '<div class="card empty"><b>Своя программа</b><p class="muted">Впишите дни тренировок и упражнения, для каждого дня выберите режим — «Силовой», «На массу» или «Многоповторка». Приложение подставит подходы и повторы, подскажет рабочие веса и проверит баланс нагрузки.</p>' +
-      '<button class="btn primary mt" data-act="progNew">Составить программу</button></div>';
+      '<button class="btn primary mt" data-act="progNew">Составить с нуля</button></div>' + templatesHtml();
   }
   return '<div class="card mt"><div class="form-grid"><label>Название<input type="text" maxlength="40" data-prog="name" value="' + esc(p.name) + '" placeholder="Моя программа"></label>' +
     '<label>Тренировок в неделю<select data-prog="perWeek">' + [1, 2, 3, 4, 5, 6, 7].map(n => '<option value="' + n + '"' + (p.perWeek === n ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></label></div></div>' +

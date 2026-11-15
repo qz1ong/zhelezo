@@ -313,3 +313,20 @@ details p { font-size: 14px; color: #c5cbd7; }
 .cmp > span:first-child { text-align: left; }
 .cmp small { display: block; font-size: 11px; }
 .cmp b { font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+
+/* ---------- питание, цель, первый запуск ---------- */
+.food-top { display: flex; gap: 16px; align-items: center; }
+.food-top .ring-svg { width: 108px; height: 108px; }
+.food-top > div { flex: 1; min-width: 0; }
+.food-num { font-size: 21px; font-weight: 700; fill: var(--text); }
+.food-sub { font-size: 10px; fill: var(--muted); }
+.food-left { font-size: 17px; display: block; }
+.goal-card { color: var(--text); }
+.goal-card b { display: block; }
+.goal-card .bar { margin-top: 10px; }
+.ob-dots { display: flex; gap: 6px; margin-bottom: 14px; }
+.ob-dots i { height: 4px; flex: 1; border-radius: 4px; background: var(--line); }
+.ob-dots i.on { background: var(--acc); }
+.chart .target { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.top .muted { font-size: 13px; margin-top: 2px; }
+@media (max-width: 400px) { #nav button { font-size: 10px; } }

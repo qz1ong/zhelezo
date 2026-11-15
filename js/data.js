@@ -173,6 +173,47 @@ const TEST_ITEMS = [
   { id: 'pullup', kind: 'r' }, { id: 'pushup', kind: 'r' }, { id: 'plank', kind: 'sec' }
 ];
 
+/* ---------- Цель и питание ----------
+   kcal — поправка к суточному расходу, protein — граммов белка на кг веса */
+const GOALS = {
+  lose: { name: 'Похудеть', desc: 'Меньше жира, сила и мышцы остаются', kcal: -0.15, protein: 2.0,
+    how: 'Небольшой дефицит калорий, тяжёлые базовые упражнения, чтобы сохранить мышцы, и пара кардио в неделю.' },
+  gain: { name: 'Набрать массу', desc: 'Больше мышц и силы', kcal: 0.10, protein: 1.8,
+    how: 'Небольшой избыток калорий, 8–12 повторов и постепенная прибавка весов.' },
+  keep: { name: 'Держать форму', desc: 'Вес на месте, тонус и самочувствие', kcal: 0, protein: 1.6,
+    how: 'Калории на уровне расхода, 2–4 тренировки в неделю и немного кардио.' }
+};
+const FOCUS = {
+  str: 'Тяжёлые веса, мало повторов',
+  mid: 'Средние веса, 8–12 повторов',
+  hi: 'Лёгкие веса, много повторов, выносливость'
+};
+const MEALS = ['Завтрак', 'Обед', 'Ужин', 'Перекус'];
+
+/* Готовые программы: подходы и повторы подставляются по выбранному режиму */
+const PROGRAM_TEMPLATES = [
+  { id: 'full2', name: 'Всё тело, 2 дня', perWeek: 2, desc: 'Минимум времени: всё тело за тренировку', days: [
+    { name: 'Всё тело А', items: ['squat', 'bench', 'bb_row', 'db_press', 'plank'] },
+    { name: 'Всё тело Б', items: ['deadlift', 'db_bench', 'lat_pulldown', 'lunge', 'crunch'] }
+  ] },
+  { id: 'full3', name: 'Всё тело, 3 дня', perWeek: 3, desc: 'Лучший старт: каждая группа три раза в неделю', days: [
+    { name: 'Всё тело А', items: ['squat', 'bench', 'bb_row', 'lat_raise', 'plank'] },
+    { name: 'Всё тело Б', items: ['deadlift', 'db_press', 'lat_pulldown', 'lunge', 'crunch'] },
+    { name: 'Всё тело В', items: ['leg_press', 'db_bench', 'pullup', 'db_curl', 'pushdown'] }
+  ] },
+  { id: 'ppl3', name: 'Жим / тяга / ноги, 3 дня', perWeek: 3, desc: 'Каждый день — своя группа движений', days: [
+    { name: 'Жим', items: ['bench', 'ohp', 'db_bench', 'lat_raise', 'pushdown'] },
+    { name: 'Тяга', items: ['deadlift', 'pullup', 'bb_row', 'face_pull', 'db_curl'] },
+    { name: 'Ноги', items: ['squat', 'leg_press', 'rdl', 'leg_curl', 'calf_raise', 'plank'] }
+  ] },
+  { id: 'ul4', name: 'Верх / низ, 4 дня', perWeek: 4, desc: 'Больше объёма: верх и низ по два раза', days: [
+    { name: 'Верх А', items: ['bench', 'bb_row', 'db_press', 'lat_pulldown', 'db_curl', 'pushdown'] },
+    { name: 'Низ А', items: ['squat', 'rdl', 'leg_press', 'calf_raise', 'plank'] },
+    { name: 'Верх Б', items: ['ohp', 'pullup', 'db_bench', 'cable_row', 'lat_raise', 'face_pull'] },
+    { name: 'Низ Б', items: ['deadlift', 'lunge', 'leg_curl', 'hip_thrust', 'leg_raise'] }
+  ] }
+];
+
 const EXPERIENCE = { '': 'не указан', new: 'до полугода', mid: 'от полугода до 2 лет', adv: 'больше 2 лет' };
 const GIRTHS = { chest: 'Грудь', waist: 'Талия', biceps: 'Бицепс', thigh: 'Бедро' };
 
