@@ -1,5 +1,5 @@
 /* Офлайн-режим: сначала сеть (чтобы обновления приходили сразу), без сети — из кэша */
-const CACHE = 'zhelezo-v5';
+const CACHE = 'zhelezo-v6';
 const ASSETS = [
   './', 'index.html', 'css/styles.css', 'css/motion.css',
   'js/data.js', 'js/store.js', 'js/calc.js', 'js/charts.js', 'js/program.js', 'js/nutrition.js', 'js/app.js',

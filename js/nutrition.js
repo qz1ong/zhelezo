@@ -357,8 +357,9 @@ function obSave() {
   persist();
   return true;
 }
+/* Анкета показывается один раз — и тем, кто уже вёл записи до её появления, пока цель не выбрана */
 function needsOnboard() {
-  return !S.profile.onboarded && !S.workouts.length && !S.weights.length && !S.program && !S.food.length;
+  return !S.profile.onboarded && !GOALS[S.profile.goal] && !S.draft;
 }
 
 /* ---------- действия ---------- */
