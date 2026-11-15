@@ -52,7 +52,7 @@ function countUp(root) {
 }
 /* Салют при новом рекорде */
 function celebrate() {
-  if (calmMotion() || !document.body.animate) return;
+  if (calmMotion() || !document.body.animate || document.querySelector('.confetti')) return;   // один салют за раз
   const box = document.createElement('div');
   box.className = 'confetti';
   document.body.appendChild(box);
@@ -134,7 +134,7 @@ function viewHome() {
   const name = (S.profile.name || '').trim();
   return '<header class="top"><div><div class="muted">' + fmtDateLong(t) + '</div><h1>' + (name ? 'Привет, ' + esc(name) + '!' : 'Железо') + '</h1></div></header>' +
     '<button class="btn primary big" data-act="startWorkout">' + (S.draft ? 'Продолжить тренировку' : 'Начать тренировку') + '</button>' +
-    todayPlanCard() + goalCard() +
+    todayPlanCard() + streakCard() + goalCard() +
     '<div class="grid2">' + ratingCard('Сила', sr, ACC) + ratingCard('Выносливость', er, BLUE) + '</div>' +
     '<div class="stats">' +
     '<div><b>' + in7.length + '</b><span>' + plural(in7.length, 'тренировка', 'тренировки', 'тренировок') + ' за 7 дней</span></div>' +
@@ -302,10 +302,10 @@ const METRICS = {
 const RANGES = [[30, '1 мес'], [90, '3 мес'], [180, '6 мес'], [365, 'Год'], [0, 'Всё']];
 
 function viewProgress() {
-  const tabs = [['ex', 'Упражнения'], ['rating', 'Рейтинг'], ['volume', 'Объём']];
+  const tabs = [['ex', 'Упражнения'], ['rating', 'Рейтинг'], ['volume', 'Объём'], ['badges', 'Награды']];
   return '<header class="top"><h1>Прогресс</h1></header>' +
     '<div class="seg">' + tabs.map(t => '<button class="' + (UI.seg === t[0] ? 'on' : '') + '" data-act="seg" data-seg="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>' +
-    (UI.seg === 'ex' ? progEx() : UI.seg === 'rating' ? progRating() : progVolume());
+    (UI.seg === 'ex' ? progEx() : UI.seg === 'rating' ? progRating() : UI.seg === 'badges' ? progBadges() : progVolume());
 }
 
 function progEx() {
@@ -550,6 +550,12 @@ function sanitizeImport(obj) {
   pr.kcalTarget = +pr.kcalTarget >= 800 && +pr.kcalTarget <= 6000 ? Math.round(+pr.kcalTarget) : null;
   pr.perWeek = +pr.perWeek >= 1 && +pr.perWeek <= 7 ? Math.round(+pr.perWeek) : null;
   pr.onboarded = true;   // в копии уже есть данные — анкету первого запуска не показываем
+  const got = {};
+  for (const b of BADGES) {
+    if (b.id in st.badges) got[b.id] = DATE_RE.test(st.badges[b.id] || '') ? st.badges[b.id] : null;
+  }
+  st.badges = got;
+  st.badgesInit = !!st.badgesInit;
   st.weights = st.weights.filter(w => w && DATE_RE.test(w.date) && +w.kg > 0).map(w => ({ date: w.date, kg: +w.kg }));
   st.injuries = st.injuries.filter(i => i && DATE_RE.test(i.date) && AREAS[i.area]).map(i => Object.assign({}, i, {
     id: String(i.id || uid()), severity: Math.min(3, Math.max(1, +i.severity || 1)),
@@ -566,7 +572,7 @@ function importFile(file) {
     try { st = sanitizeImport(JSON.parse(fr.result)); } catch (e) { st = null; }
     if (!st) { toast('Это не похоже на копию данных приложения'); return; }
     confirmBox('Загрузить копию?', 'В файле ' + st.workouts.length + ' ' + plural(st.workouts.length, 'тренировка', 'тренировки', 'тренировок') + '. Текущие данные на этом устройстве будут заменены.', 'Заменить', () => {
-      S = st; persist(); closeModal(); go('home'); toast('Данные загружены');
+      S = st; persist(); checkBadges(true); closeModal(); go('home'); toast('Данные загружены');
     });
   };
   fr.readAsText(file);
@@ -773,12 +779,12 @@ const ACT = {
   export: () => exportData(),
   import: () => $('#imp').click(),
   demo: () => {
-    const load = () => { S = buildDemoState(); persist(); closeModal(); UI.progEx = null; go('home'); toast('Загружены демо-данные за 12 недель'); };
+    const load = () => { S = buildDemoState(); persist(); checkBadges(true); closeModal(); UI.progEx = null; go('home'); toast('Загружены демо-данные за 12 недель'); };
     if (S.workouts.length || S.weights.length) confirmBox('Загрузить демо-данные?', 'Текущие тренировки, программа, вес, замеры и травмы будут заменены примером. Сначала сохраните копию, если они нужны.', 'Заменить', load, true);
     else load();
   },
   wipe: () => confirmBox('Стереть все данные?', 'Тренировки, программа, питание, вес, замеры, травмы и свои упражнения будут удалены с этого устройства без возможности восстановления.', 'Стереть', () => {
-    S = defaultState(); S.profile.onboarded = true; persist(); closeModal(); UI.progEx = null; go('home'); toast('Данные удалены');
+    S = defaultState(); S.profile.onboarded = true; S.badgesInit = true; persist(); closeModal(); UI.progEx = null; go('home'); toast('Данные удалены');
   }, true),
   install: () => {
     if (!deferredInstall) return;
@@ -789,6 +795,12 @@ const ACT = {
 };
 Object.assign(ACT, PROG_ACT);   // программа, режимы, проверка силы, стартовые показатели
 Object.assign(ACT, NUTR_ACT);   // питание, цель, первый запуск, готовые программы
+Object.assign(ACT, BADGE_ACT);  // награды и серии
+/* После этих действий могла появиться новая награда */
+for (const k of ['saveDraft', 'saveTest', 'addWeight', 'addFood', 'healInjury', 'saveStart']) {
+  const fn = ACT[k];
+  ACT[k] = (el, e) => { fn(el, e); checkBadges(); };
+}
 
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
@@ -872,6 +884,7 @@ if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
+checkBadges(true);   // записи, сделанные до появления наград, отмечаются молча
 render();
 enterAnim();
 if (needsOnboard()) openOnboard(0);   // первый запуск: имя, цель, тип тренировок

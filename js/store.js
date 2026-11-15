@@ -8,6 +8,8 @@ function defaultState() {
     v: 1,
     profile: { name: '', sex: 'm', birthYear: null, height: null, startDate: null, exp: '', goal: '', focus: '', goalKg: null, kcalTarget: null, perWeek: null, onboarded: false },
     food: [],             // {id, date, kcal, protein, note} — записи о еде
+    badges: {},           // полученные награды: id -> дата (null, если получена до появления наград)
+    badgesInit: false,
     measures: [],         // {date, chest, waist, biceps, thigh} — обхваты в см
     program: null,        // {name, perWeek, days:[{id, name, mode, items:[{exId, sets, rmin, rmax}]}]}
     weights: [],          // {date, kg}
@@ -33,6 +35,7 @@ function normalizeState(obj) {
     if (!Array.isArray(st[k])) st[k] = [];
   }
   st.program = normalizeProgram(st.program);
+  if (!st.badges || typeof st.badges !== 'object' || Array.isArray(st.badges)) st.badges = {};
   return st;
 }
 

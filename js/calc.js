@@ -785,6 +785,10 @@ function recommendations() {
   const n7 = ws.filter(w => { const d = daysDiff(w.date, t); return d >= 0 && d < 7; }).length;
   if (gap >= 14) out.push({ k: 'warn', title: 'Перерыв ' + gap + ' ' + plural(gap, 'день', 'дня', 'дней'), text: 'После паузы начните с 80–85 % прежних весов и вернитесь к рабочим за 1–2 недели.' });
   else if (gap >= 7) out.push({ k: 'info', title: 'Неделя без тренировок', text: 'Последняя тренировка была ' + fmtDate(last.date) + '. Для роста силы каждой группе мышц нужна нагрузка хотя бы раз в 5–7 дней.' });
+  const sk = weekStreak();
+  if (sk.cur >= 2 && !sk.thisWeek && (parseD(t).getDay() + 6) % 7 >= 4) {
+    out.push({ k: 'warn', act: 'startWorkout', title: 'Серия под угрозой', text: sk.cur + ' ' + plural(sk.cur, 'неделя', 'недели', 'недель') + ' подряд, а на этой неделе тренировки ещё не было. Хватит одной короткой, чтобы серия продолжилась.' });
+  }
   if (n7 >= 6) out.push({ k: 'warn', title: 'Мало отдыха', text: n7 + ' тренировок за 7 дней. Оставьте хотя бы 1–2 дня полного отдыха — мышцы растут во время восстановления.' });
 
   // рекорды последней тренировки
