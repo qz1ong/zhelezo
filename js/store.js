@@ -10,6 +10,7 @@ function defaultState() {
     food: [],             // {id, date, kcal, protein, note} — записи о еде
     badges: {},           // полученные награды: id -> дата (null, если получена до появления наград)
     badgesInit: false,
+    cali: {},             // калистеника: навык -> сколько этапов отмечено вручную
     measures: [],         // {date, chest, waist, biceps, thigh} — обхваты в см
     program: null,        // {name, perWeek, days:[{id, name, mode, items:[{exId, sets, rmin, rmax}]}]}
     weights: [],          // {date, kg}
@@ -36,6 +37,7 @@ function normalizeState(obj) {
   }
   st.program = normalizeProgram(st.program);
   if (!st.badges || typeof st.badges !== 'object' || Array.isArray(st.badges)) st.badges = {};
+  if (!st.cali || typeof st.cali !== 'object' || Array.isArray(st.cali)) st.cali = {};
   return st;
 }
 

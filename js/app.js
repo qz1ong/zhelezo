@@ -103,7 +103,7 @@ function confirmBox(title, text, yes, cb, danger) {
 
 function render() {
   CHARTS = {};
-  const views = { home: viewHome, log: viewLog, edit: viewEdit, food: viewFood, progress: viewProgress, injuries: viewInjuries, profile: viewProfile };
+  const views = { home: viewHome, log: viewLog, edit: viewEdit, food: viewFood, cali: viewCali, progress: viewProgress, injuries: viewInjuries, profile: viewProfile };
   if (UI.tab === 'edit' && !S.draft) UI.tab = 'log';
   $('#view').innerHTML = views[UI.tab]();
   const navTab = UI.tab === 'edit' ? 'log' : UI.tab;
@@ -162,7 +162,7 @@ function workoutCard(w, forceOpen) {
     for (const en of exs) {
       const ex = exById(en.exId);
       const sets = (en.sets || []).filter(s => isValidSet(ex, s));
-      html += '<div class="wk-ex"><span>' + esc(ex.name) + '</span><span class="muted">' + sets.map(s => setText(ex, s)).join(', ') + '</span></div>';
+      html += '<div class="wk-ex"><span>' + esc(ex.name) + '</span><span class="muted">' + (en.warm ? '<small class="wu-tag">разминка ' + en.warm + '</small> ' : '') + sets.map(s => setText(ex, s)).join(', ') + '</span></div>';
     }
     html += '<div class="row-btns">' + (w.test ? '<button class="btn small" data-act="testResult" data-id="' + id + '">Результат</button>'
       : '<button class="btn small" data-act="repeatWk" data-id="' + id + '">Повторить</button>') +
@@ -199,17 +199,55 @@ const SET_FIELDS = {
   cardio: [['km', 'Дистанция, км'], ['min', 'Время, мин']]
 };
 
+/* ---------- Разминочные подходы ----------
+   Рабочий вес: что уже вписано в подходы → цель по плану → прошлый максимум.
+   Разминка нужна базовым упражнениям и первому упражнению на группу мышц; в тоннаж и рекорды она не идёт. */
+const BARBELL = ['bench', 'incline_bench', 'deadlift', 'bb_row', 'squat', 'front_squat', 'rdl', 'hip_thrust', 'ohp', 'bb_curl', 'close_bench', 'shrug'];
+function warmupPlan(ex, en, i, d, plan, hist) {
+  if (ex.type !== 'w') return null;
+  const typed = Math.max.apply(null, [0].concat(en.sets.map(s => +s.w || 0)));
+  let top = typed;
+  if (!top && plan) { const tg = planTarget(ex, plan, hist); if (tg && tg.w) top = tg.w; }
+  if (!top && hist.length) top = hist[hist.length - 1].st.maxW;
+  if (!(top >= 20)) return null;
+  const compound = COMPOUND.includes(ex.id);
+  const firstOfGroup = d.entries.findIndex(e => { const x = exById(e.exId); return x && x.muscle === ex.muscle; }) === i;
+  if (!compound && !firstOfGroup) return null;
+  const mode = d.test ? 'str' : (plan && planMode(plan)) || d.mode;
+  const scheme = !compound ? [[0.5, 12]]
+    : mode === 'str' ? [[0.4, 8], [0.6, 5], [0.75, 3], [0.85, 1]]
+    : mode === 'hi' ? [[0.5, 12], [0.75, 6]]
+    : [[0.5, 10], [0.7, 5], [0.85, 2]];
+  const bar = BARBELL.includes(ex.id) ? 20 : 0, sets = [];
+  if (bar && top >= 40) sets.push({ w: bar, r: 10, bar: true });
+  for (const sc of scheme) {
+    const w = roundTo(top * sc[0], 2.5);
+    if (w <= bar || w < 2.5 || w >= top || sets.some(s => s.w === w)) continue;
+    sets.push({ w, r: sc[1] });
+  }
+  return sets.length ? { top, sets } : null;
+}
+function warmupHtml(wu, en, i) {
+  const done = Array.isArray(en.wu) ? en.wu : [];
+  return '<div class="wu"><div class="wu-h"><b>Разминка</b><span class="muted small">до рабочих ' + fmtNum(wu.top, 2) + ' кг · не идёт в тоннаж</span></div><div class="wu-sets">' +
+    wu.sets.map((s, k) => '<button class="' + (done.includes(k) ? 'on' : '') + '" data-act="wuTick" data-i="' + i + '" data-k="' + k + '" aria-pressed="' + done.includes(k) + '">' +
+      '<i>' + (done.includes(k) ? '✓' : k + 1) + '</i>' + (s.bar ? 'гриф ' : '') + fmtNum(s.w, 2) + ' кг × ' + s.r + '</button>').join('') + '</div></div>';
+}
+
 function entryCard(en, i) {
   const ex = exById(en.exId);
   if (!ex) return '';
   const fields = SET_FIELDS[ex.type];
-  const hint = exerciseHint(en.exId, S.draft.id, S.draft.test ? null : planFor(S.draft, ex));
+  const plan = S.draft.test ? null : planFor(S.draft, ex);
+  const hint = exerciseHint(en.exId, S.draft.id, plan);
+  const wu = warmupPlan(ex, en, i, S.draft, plan, exHistory(en.exId, S.draft.id));
   let html = '<div class="card entry"><div class="entry-head"><div><b>' + esc(ex.name) + '</b><div class="muted">' + (MUSCLES[ex.muscle] || '') + '</div></div>' +
     '<button class="x" data-act="delEntry" data-i="' + i + '" aria-label="Убрать упражнение">✕</button></div>';
   if (hint.injury) html += '<div class="hint inj l' + hint.injury.level + '">' + esc(hint.injury.text) + '</div>';
   if (hint.plan) html += '<div class="hint plan">' + esc(hint.plan) + '</div>';
   if (hint.last) html += '<div class="hint">' + esc(hint.last) + '</div>';
   if (hint.target && !S.draft.test) html += '<div class="hint target">' + esc(hint.target) + '</div>';
+  if (wu) html += warmupHtml(wu, en, i);
   html += '<div class="sets c' + fields.length + '"><div class="set head"><span>№</span>' + fields.map(f => '<span>' + f[1] + '</span>').join('') + '<span></span></div>';
   const prev = hint.lastSets;
   en.sets.forEach((s, j) => {
@@ -267,13 +305,15 @@ function renderPickList() {
   if (!box) return;
   const q = UI.pick.q.trim().toLowerCase(), m = UI.pick.m;
   chips.innerHTML = '<button class="' + (m ? '' : 'on') + '" data-act="pickMuscle" data-m="">Все</button>' +
-    Object.keys(MUSCLES).map(k => '<button class="' + (m === k ? 'on' : '') + '" data-act="pickMuscle" data-m="' + k + '">' + MUSCLES[k] + '</button>').join('');
+    Object.keys(MUSCLES).map(k => '<button class="' + (m === k ? 'on' : '') + '" data-act="pickMuscle" data-m="' + k + '">' + MUSCLES[k] + '</button>').join('') +
+    '<button class="' + (m === 'cali' ? 'on' : '') + '" data-act="pickMuscle" data-m="cali">Калистеника</button>';
   const item = e => {
     const v = injuryVerdict(e);
     const badge = v.level === 3 ? '<span class="badge bad">исключить</span>' : v.level === 2 ? '<span class="badge warn">−' + v.pct + ' %</span>' : v.level === 1 ? '<span class="badge care">осторожно</span>' : '';
     return '<button class="pick" data-act="addEx" data-id="' + esc(e.id) + '"><span><b>' + esc(e.name) + '</b><small>' + (MUSCLES[e.muscle] || '') + (e.custom ? ' · своё' : '') + '</small></span>' + badge + '</button>';
   };
-  const list = allExercises().filter(e => (!m || e.muscle === m) && (!q || e.name.toLowerCase().includes(q)));
+  // этапы калистеники видны по поиску и в своём разделе, чтобы не раздувать общий список
+  const list = allExercises().filter(e => (m === 'cali' ? e.cali : (!m || e.muscle === m) && (q || !e.cali)) && (!q || e.name.toLowerCase().includes(q)));
   const recent = (!q && !m) ? usedExerciseIds().slice(0, 6).map(exById).filter(Boolean) : [];
   let html = '';
   if (recent.length) html += '<div class="list-h">Частые</div>' + recent.map(item).join('') + '<div class="list-h">Все упражнения</div>';
@@ -525,7 +565,11 @@ function sanitizeImport(obj) {
   st.workouts = st.workouts.filter(w => w && DATE_RE.test(w.date) && Array.isArray(w.entries)).map(w => {
     const o = {
       id: String(w.id || uid()), date: w.date, note: String(w.note || ''),
-      entries: w.entries.filter(en => en && Array.isArray(en.sets)).map(en => ({ exId: String(en.exId), sets: en.sets.filter(s => s && typeof s === 'object') }))
+      entries: w.entries.filter(en => en && Array.isArray(en.sets)).map(en => {
+        const e = { exId: String(en.exId), sets: en.sets.filter(s => s && typeof s === 'object') };
+        if (+en.warm >= 1 && +en.warm <= 10) e.warm = Math.round(+en.warm);
+        return e;
+      })
     };
     if (w.dayId) o.dayId = String(w.dayId);
     if (MODES[w.mode]) o.mode = w.mode;
@@ -556,6 +600,9 @@ function sanitizeImport(obj) {
   }
   st.badges = got;
   st.badgesInit = !!st.badgesInit;
+  const cali = {};
+  for (const sk of CALI_SKILLS) { const n = clampInt(st.cali[sk.id], 1, sk.stages.length, 0); if (n) cali[sk.id] = n; }
+  st.cali = cali;
   st.weights = st.weights.filter(w => w && DATE_RE.test(w.date) && +w.kg > 0).map(w => ({ date: w.date, kg: +w.kg }));
   st.injuries = st.injuries.filter(i => i && DATE_RE.test(i.date) && AREAS[i.area]).map(i => Object.assign({}, i, {
     id: String(i.id || uid()), severity: Math.min(3, Math.max(1, +i.severity || 1)),
@@ -662,6 +709,13 @@ const ACT = {
     en.sets.push(blankSet(ex, en.sets[en.sets.length - 1]));
     persist(); render();
   },
+  wuTick: el => {
+    const en = S.draft && S.draft.entries[+el.dataset.i], k = +el.dataset.k;
+    if (!en) return;
+    const done = Array.isArray(en.wu) ? en.wu : [];
+    en.wu = done.includes(k) ? done.filter(x => x !== k) : done.concat(k);
+    persist(); render();
+  },
   delSet: el => { S.draft.entries[+el.dataset.i].sets.splice(+el.dataset.j, 1); persist(); render(); },
   delEntry: el => { S.draft.entries.splice(+el.dataset.i, 1); persist(); render(); },
   rest: el => {
@@ -677,7 +731,8 @@ const ACT = {
       const ex = exById(en.exId);
       if (!ex) continue;
       const sets = en.sets.filter(s => isValidSet(ex, s)).map(s => cleanSet(ex, s));
-      if (sets.length) entries.push({ exId: en.exId, sets });
+      const warm = Array.isArray(en.wu) ? en.wu.length : 0;
+      if (sets.length) entries.push(warm ? { exId: en.exId, sets, warm } : { exId: en.exId, sets });
     }
     if (!entries.length) { toast('Заполните хотя бы один подход'); return; }
     const date = DATE_RE.test(d.date) && d.date <= todayStr() ? d.date : todayStr();
@@ -705,14 +760,17 @@ const ACT = {
   repeatWk: el => {
     const w = findWorkout(el.dataset.id);
     if (!w) return;
-    const d = { id: null, date: todayStr(), note: '', entries: JSON.parse(JSON.stringify(w.entries)) };
+    const d = { id: null, date: todayStr(), note: '', entries: w.entries.map(en => ({ exId: en.exId, sets: JSON.parse(JSON.stringify(en.sets)) })) };
     if (w.dayId && programDay(w.dayId)) d.dayId = w.dayId;
     if (MODES[w.mode]) d.mode = w.mode;
     startDraft(d);
   },
   editWk: el => {
     const w = findWorkout(el.dataset.id);
-    if (w) startDraft(JSON.parse(JSON.stringify(w)));
+    if (!w) return;
+    const d = JSON.parse(JSON.stringify(w));
+    for (const en of d.entries) { if (en.warm) en.wu = Array.from({ length: en.warm }, (_, k) => k); delete en.warm; }
+    startDraft(d);
   },
   delWk: el => {
     const w = findWorkout(el.dataset.id);
@@ -796,8 +854,9 @@ const ACT = {
 Object.assign(ACT, PROG_ACT);   // программа, режимы, проверка силы, стартовые показатели
 Object.assign(ACT, NUTR_ACT);   // питание, цель, первый запуск, готовые программы
 Object.assign(ACT, BADGE_ACT);  // награды и серии
+Object.assign(ACT, CALI_ACT);   // калистеника
 /* После этих действий могла появиться новая награда */
-for (const k of ['saveDraft', 'saveTest', 'addWeight', 'addFood', 'healInjury', 'saveStart']) {
+for (const k of ['saveDraft', 'saveTest', 'addWeight', 'addFood', 'healInjury', 'saveStart', 'caliMark']) {
   const fn = ACT[k];
   ACT[k] = (el, e) => { fn(el, e); checkBadges(); };
 }

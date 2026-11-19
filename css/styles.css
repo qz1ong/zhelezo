@@ -364,3 +364,58 @@ details p { font-size: 14px; color: #c5cbd7; }
 .bdg-new .bdg-ic { width: 76px; height: 76px; }
 .sheet .bdg-new .bdg { animation: pop 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s both; }
 @media (max-width: 400px) { .seg button { font-size: 13px; padding: 8px 2px; } }
+
+/* ---------- калистеника, разминка, уровни наград ---------- */
+#nav .sm { display: none; }
+@media (max-width: 899px) {
+  #nav .lg { display: none; }
+  #nav .sm { display: inline; }
+  #nav button { font-size: 10.5px; }
+}
+.bdg { position: relative; }
+.bdg.t4 { --tier: #b48cff; }
+.bdg.locked.t4 { --tier: #5b6475; }
+.tier-tag { position: absolute; top: 7px; right: 8px; font-style: normal; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--tier); opacity: 0.85; }
+.tiers { display: flex; flex-direction: column; gap: 14px; }
+.tier-row { display: grid; grid-template-columns: 12px 1fr auto; gap: 4px 10px; align-items: center; --tier: #d08a4e; }
+.tier-row.t2 { --tier: #c3ccd9; }
+.tier-row.t3 { --tier: #f5c542; }
+.tier-row.t4 { --tier: #b48cff; }
+.tier-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--tier); }
+.tier-row b { display: block; font-size: 14px; }
+.tier-row small { display: block; color: var(--muted); font-size: 12px; }
+.tier-num { font-weight: 700; color: var(--tier); font-size: 14px; }
+.tier-row .bar { grid-column: 1 / -1; margin-top: 0; height: 6px; }
+.tier-row .bar i { background: var(--tier); }
+
+.wu { margin-top: 12px; background: var(--card2); border-radius: 12px; padding: 10px 12px; }
+.wu-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13px; }
+.wu-sets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.wu-sets button { display: inline-flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--line); color: var(--text); border-radius: 999px; padding: 6px 12px 6px 6px; font-size: 13px; }
+.wu-sets i { font-style: normal; width: 20px; height: 20px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 11px; background: var(--line); color: var(--muted); }
+.wu-sets button.on { border-color: var(--good); color: var(--good); }
+.wu-sets button.on i { background: var(--good); color: #062b1d; }
+.wu-tag { color: var(--blue); font-size: 11px; }
+
+.cali-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0 12px; }
+.cali-card { display: block; width: 100%; text-align: left; color: var(--text); margin-top: 12px; }
+.cali-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.cali-top b { font-size: 16px; }
+.cali-card .bar { margin-top: 10px; }
+.cali-card .bar i { background: var(--acc); }
+.cali-card.full .bar i { background: var(--good); }
+.cali-next { font-size: 13px; color: var(--muted); margin-top: 8px; line-height: 1.35; }
+.cali-card.full .cali-next { color: var(--good); font-weight: 600; }
+.dots { display: inline-flex; gap: 3px; flex: none; }
+.dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+.dots i.on { background: var(--acc); }
+.cali-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+.stages { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+.stage { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); }
+.stage b { display: block; font-size: 14px; font-weight: 600; }
+.stage small { display: block; font-size: 12px; color: var(--muted); }
+.st-ic { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--card2); color: var(--muted); }
+.stage.ok .st-ic { background: var(--good); color: #062b1d; }
+.stage.now { border-color: var(--acc); }
+.stage.now .st-ic { background: var(--acc); color: var(--acc-ink); }
+.stage:not(.ok):not(.now) b { color: var(--muted); }
